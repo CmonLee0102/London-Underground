@@ -1,0 +1,1984 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<meta name="description" content="An interactive simulation of riding the London Underground, in authentic TfL design.">
+<title>London Underground — Ride the Tube</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hammersmith+One&display=swap" rel="stylesheet">
+<style>
+/* =========================================================================
+   LONDON UNDERGROUND SIMULATOR
+   Single-file app. TfL design language. GPU-accelerated animation only.
+   ========================================================================= */
+
+/* ---- Design tokens -------------------------------------------------- */
+:root{
+  --blue:#0019A8;        /* Corporation Blue   */
+  --red:#DC241F;         /* Roundel Red        */
+  --white:#ffffff;
+  --ink:#0a0a0a;
+  --grey-1:#f4f5f7;
+  --grey-2:#e3e6ea;
+  --grey-3:#aab0b8;
+  --grey-4:#5c636b;
+  --thames:#9fc4e8;
+
+  /* Official line colours */
+  --bakerloo:#B36305;
+  --central:#E32017;
+  --circle:#FFD300;
+  --district:#00782A;
+  --hc:#F3A9BB;
+  --jubilee:#A0A5A9;
+  --metropolitan:#9B0056;
+  --northern:#000000;
+  --piccadilly:#003688;
+  --victoria:#0098D4;
+  --wc:#95CDBA;
+  --elizabeth:#6950A1;
+  --dlr:#00A4A7;
+
+  --ease:cubic-bezier(0.22,1,0.36,1);
+  --sign-radius:6px;
+  --shadow:0 6px 24px rgba(0,25,168,.14);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;height:100%}
+body{
+  font-family:"Hammersmith One","Segoe UI",system-ui,-apple-system,Helvetica,Arial,sans-serif;
+  background:var(--grey-1);
+  color:var(--ink);
+  -webkit-font-smoothing:antialiased;
+  overflow:hidden;
+}
+button{font-family:inherit;cursor:pointer;border:none;background:none}
+h1,h2,h3{font-weight:400;margin:0}
+a{color:var(--blue)}
+
+/* ---- App scaffolding / screen transitions --------------------------- */
+#app{position:relative;width:100vw;height:100vh;height:100dvh;overflow:hidden}
+.screen{
+  position:absolute;inset:0;
+  opacity:0;visibility:hidden;
+  transform:translate3d(0,24px,0);
+  transition:opacity .5s var(--ease),transform .5s var(--ease),visibility .5s;
+  will-change:opacity,transform;
+  overflow:hidden;
+}
+.screen.active{opacity:1;visibility:visible;transform:translate3d(0,0,0)}
+.screen.exit-left{transform:translate3d(-40px,0,0)}
+
+@media (prefers-reduced-motion:reduce){
+  .screen{transition:opacity .2s linear;transform:none!important}
+}
+
+/* ---- Generic TfL sign button ---------------------------------------- */
+.tfl-sign{
+  display:inline-flex;align-items:center;gap:.6em;
+  background:var(--blue);color:#fff;
+  padding:.75em 1.5em;border-radius:var(--sign-radius);
+  font-size:1.15rem;letter-spacing:.02em;
+  box-shadow:var(--shadow);
+  transition:transform .2s var(--ease),background .2s;
+  will-change:transform;
+}
+.tfl-sign:hover{transform:translateY(-2px)}
+.tfl-sign:active{transform:translateY(0)}
+.tfl-sign.secondary{background:#fff;color:var(--blue);box-shadow:0 2px 8px rgba(0,0,0,.12);border:2px solid var(--grey-2)}
+.tfl-sign:focus-visible{outline:3px solid var(--victoria);outline-offset:2px}
+
+/* =========================================================================
+   A) HOME SCREEN
+   ========================================================================= */
+#home{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;gap:1.2rem;padding:2rem;
+  background:
+    radial-gradient(circle at 20% 15%, rgba(0,25,168,.05), transparent 45%),
+    radial-gradient(circle at 85% 80%, rgba(220,36,31,.05), transparent 45%),
+    repeating-linear-gradient(0deg,#fff 0 46px,#f4f5f7 46px 48px),
+    repeating-linear-gradient(90deg,transparent 0 46px,rgba(0,0,0,.015) 46px 48px);
+}
+/* drifting tube-line backdrop */
+.home-bg{position:absolute;inset:0;z-index:0;overflow:hidden;pointer-events:none;
+  animation:homedrift 26s ease-in-out infinite alternate}
+.home-bg svg{position:absolute;top:50%;left:50%;width:150%;height:150%;transform:translate(-50%,-50%)}
+.home-lines{opacity:.15}
+.home-lines path{stroke-linecap:round}
+@keyframes homedrift{from{transform:translate(-16px,-10px)}to{transform:translate(16px,10px)}}
+/* keep foreground content above the backdrop */
+#home>*:not(.home-bg){position:relative;z-index:1}
+.home-roundel{width:min(42vw,220px);height:auto;filter:drop-shadow(0 6px 18px rgba(0,25,168,.18))}
+#home h1{font-size:clamp(2.2rem,7vw,4rem);color:var(--blue);line-height:1.05;letter-spacing:.01em;
+  text-shadow:0 2px 12px rgba(0,25,168,.14)}
+#home .subtitle{font-size:clamp(1rem,3vw,1.3rem);color:var(--grey-4);max-width:34ch}
+#home .start-row{margin-top:.8rem}
+
+/* Roundel self-draw animation */
+.draw-ring{
+  stroke-dasharray:1;stroke-dashoffset:1;
+  animation:draw 1.4s var(--ease) forwards;
+}
+@keyframes draw{to{stroke-dashoffset:0}}
+.fade-bar{opacity:0;animation:fadeIn .6s ease .9s forwards}
+.fade-text{opacity:0;animation:fadeIn .6s ease 1.2s forwards}
+@keyframes fadeIn{to{opacity:1}}
+@media (prefers-reduced-motion:reduce){
+  .draw-ring{animation:none;stroke-dashoffset:0}
+  .fade-bar,.fade-text{animation:none;opacity:1}
+  .home-bg{animation:none}
+}
+
+/* =========================================================================
+   B) STATION SELECTION / MAP
+   ========================================================================= */
+#map-screen{display:flex;flex-direction:column}
+.map-topbar{
+  position:relative;z-index:20;
+  background:linear-gradient(180deg,#0b2cc4 0%,var(--blue) 55%,#001585 100%);
+  color:#fff;
+  padding:.65rem .95rem;
+  display:flex;flex-direction:column;gap:.6rem;
+  box-shadow:0 6px 20px rgba(0,25,168,.28);
+  border-bottom:3px solid var(--red);        /* roundel-red accent line */
+}
+.map-topbar::before{  /* subtle top sheen */
+  content:"";position:absolute;left:0;right:0;top:0;height:1px;
+  background:rgba(255,255,255,.28);pointer-events:none;
+}
+.map-topbar .row1{display:flex;align-items:center;gap:.85rem}
+.mini-roundel{width:38px;height:38px;flex:none;filter:drop-shadow(0 2px 4px rgba(0,0,0,.35))}
+.map-title{font-size:1.15rem;letter-spacing:.04em;white-space:nowrap;
+  text-shadow:0 1px 2px rgba(0,0,0,.25)}
+.search-wrap{position:relative;flex:1;max-width:360px;margin-left:auto}
+.search-wrap::before{  /* magnifier icon */
+  content:"";position:absolute;left:.75em;top:50%;transform:translateY(-50%);
+  width:16px;height:16px;pointer-events:none;opacity:.5;
+  background:no-repeat center/contain url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235c636b' stroke-width='2.4' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M20.5 20.5l-4.2-4.2'/%3E%3C/svg%3E");
+}
+#search{
+  width:100%;padding:.55em .9em .55em 2.3em;border-radius:999px;
+  border:2px solid transparent;font-family:inherit;font-size:.95rem;color:var(--ink);
+  background:#fff;box-shadow:inset 0 1px 3px rgba(0,0,0,.12);
+  transition:box-shadow .2s,border-color .2s;
+}
+#search::placeholder{color:var(--grey-3)}
+#search:focus{outline:none;border-color:var(--victoria);
+  box-shadow:0 0 0 4px rgba(0,152,212,.28)}
+.autocomplete{
+  position:absolute;top:calc(100% + 4px);left:0;right:0;
+  background:#fff;border-radius:var(--sign-radius);
+  box-shadow:var(--shadow);max-height:46vh;overflow:auto;z-index:40;
+  display:none;
+}
+.autocomplete.show{display:block}
+.ac-item{
+  padding:.55em .8em;color:var(--ink);font-size:.95rem;
+  display:flex;align-items:center;gap:.5em;cursor:pointer;
+}
+.ac-item:hover,.ac-item.active{background:var(--grey-1)}
+.ac-dot{width:10px;height:10px;border-radius:50%;flex:none}
+
+.chips{display:flex;gap:.45rem;overflow-x:auto;margin-top:.5rem;padding-top:.3rem;padding-bottom:.2rem;
+  -webkit-overflow-scrolling:touch;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{
+  flex:none;padding:.34em .9em;border-radius:999px;
+  font-size:.82rem;color:#fff;white-space:nowrap;
+  border:2px solid rgba(255,255,255,.4);
+  opacity:.88;transition:transform .15s var(--ease),opacity .15s,box-shadow .15s;
+  will-change:transform;
+}
+.chip:hover{transform:translateY(-1px);opacity:1}
+.chip[aria-pressed="true"]{outline:2px solid #fff;outline-offset:1px;opacity:1;transform:translateY(-1px);
+  box-shadow:0 3px 10px rgba(0,0,0,.28)}
+.chip.reset{background:#fff;color:var(--blue);border-color:#fff}
+
+/* The stage OUTSIDE the map: notebook paper with light-blue ruled lines
+   and a red margin, so the framed map sits on it like a journal page. */
+.map-stage{position:relative;flex:1;overflow:hidden;touch-action:none;
+  background-color:#fbf7ec;
+  background-image:
+    repeating-linear-gradient(to bottom, rgba(70,130,200,.22) 0 1px, transparent 1px 28px),
+    linear-gradient(to right, transparent 0 53px, rgba(220,36,31,.40) 53px 54px,
+      transparent 54px 57px, rgba(220,36,31,.22) 57px 58px, transparent 58px);}
+/* scattered London Underground roundels on the paper around the map */
+.paper-decor{position:absolute;inset:0;z-index:1;pointer-events:none}
+.paper-roundel{position:absolute;opacity:.7}
+/* "dive into station" transition: fade + soften the map as it zooms in */
+.map-stage.diving{animation:mapdive .56s var(--ease) forwards}
+@keyframes mapdive{to{opacity:0;filter:blur(2.5px)}}
+@media (prefers-reduced-motion:reduce){.map-stage.diving{animation:none}}
+
+/* The map window: a transparent clip area over the paper. The visible frame
+   is drawn inside the SVG (.map-border) so it sits on the map's own edge and
+   pans/zooms with the map instead of being pinned to the window. */
+.map-viewport{position:absolute;inset:0;z-index:2;overflow:hidden;background:transparent;}
+.map-border{fill:none;stroke:var(--blue);stroke-width:5;
+  filter:drop-shadow(0 6px 14px rgba(0,0,0,.22))}
+.map-border-inner{fill:none;stroke:rgba(0,25,168,.3);stroke-width:2}
+#tube-map{position:absolute;top:0;left:0;width:100%;height:100%;
+  user-select:none;-webkit-user-select:none;-moz-user-select:none;
+  text-rendering:geometricPrecision;shape-rendering:geometricPrecision}
+#tube-map text{user-select:none;-webkit-user-select:none}
+.map-hint{
+  position:absolute;bottom:10px;left:50%;transform:translateX(-50%);
+  background:rgba(10,10,10,.72);color:#fff;font-size:.78rem;
+  padding:.35em .9em;border-radius:999px;pointer-events:none;
+  transition:opacity .4s;z-index:10;
+}
+.zoom-ctrls{position:absolute;right:12px;bottom:12px;display:flex;flex-direction:column;gap:6px;z-index:10}
+.zoom-ctrls button{
+  width:40px;height:40px;background:#fff;border-radius:8px;color:var(--blue);
+  font-size:1.4rem;box-shadow:var(--shadow);line-height:1;
+}
+.zoom-ctrls button:active{transform:scale(.94)}
+
+/* SVG map elements */
+.line-casing{fill:none;stroke:#ffffff;stroke-width:5.6;stroke-linecap:round;stroke-linejoin:round;opacity:.95;transition:opacity .3s}
+.line-casing.line-dim{opacity:.1}
+.line-path{fill:none;stroke-linecap:round;stroke-linejoin:round;transition:opacity .3s,stroke-width .3s}
+.line-dim{opacity:.16}
+.station-tick{stroke:#111;stroke-width:1.6;transition:opacity .3s}
+.station-hit{fill:transparent;cursor:pointer}
+.interchange{fill:#fff;stroke:#111;stroke-width:2.2;transition:transform .15s var(--ease);transform-box:fill-box;transform-origin:center;filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.25))}
+.normal-dot{fill:#fff;stroke:#111;stroke-width:1.4;transition:transform .15s var(--ease);transform-box:fill-box;transform-origin:center}
+.st-group:hover .interchange,.st-group:hover .normal-dot,
+.st-group:focus-visible .interchange,.st-group:focus-visible .normal-dot{transform:scale(1.35)}
+.st-group:focus{outline:none}
+.st-group:focus-visible .st-label{opacity:1;font-weight:700}
+.st-label{font-size:8px;fill:#111;pointer-events:none;transition:opacity .3s;
+  paint-order:stroke;stroke:#ffffff;stroke-width:2.4px;stroke-linejoin:round;stroke-linecap:round}
+.st-label.hide{opacity:0}
+.river{opacity:1}
+.river-label{fill:#5c8cbf;font-size:9px;font-style:italic;opacity:.9;
+  paint-order:stroke;stroke:rgba(255,255,255,.55);stroke-width:1.6px}
+/* Google-Maps-style simplified basemap (decorative, behind the schematic) */
+.map-land{fill:#e8ebee}
+.road-casing{fill:none;stroke:#d6dbe1;stroke-linecap:round;stroke-linejoin:round}
+.road{fill:none;stroke:#ffffff;stroke-linecap:round;stroke-linejoin:round}
+.road-casing.arterial{stroke:#ecd6a2}
+.road-casing.motorway{stroke:#e4b84e}
+.road.motorway{stroke:#f9d366}
+.park{fill:#c3e0a8;opacity:.95}
+.park-label{fill:#5f8a3f;font-size:8px;font-style:italic;opacity:.85;pointer-events:none;
+  paint-order:stroke;stroke:rgba(255,255,255,.7);stroke-width:1.6px;stroke-linejoin:round}
+.dim-station{opacity:.2}
+
+/* Tooltip */
+#tooltip{
+  position:absolute;z-index:30;pointer-events:none;
+  background:#fff;border-radius:8px;box-shadow:var(--shadow);
+  padding:.55em .75em;font-size:.82rem;max-width:220px;
+  opacity:0;transform:translateY(4px);transition:opacity .15s,transform .15s;
+}
+#tooltip.show{opacity:1;transform:translateY(0)}
+#tooltip .tt-name{font-size:.95rem;color:var(--blue)}
+#tooltip .tt-lines{display:flex;flex-wrap:wrap;gap:4px;margin:.35em 0}
+#tooltip .tt-zone{color:var(--grey-4)}
+.line-badge{
+  display:inline-block;font-size:.68rem;color:#fff;
+  padding:.1em .5em;border-radius:4px;white-space:nowrap;
+}
+.line-badge.light{color:#111}
+
+/* =========================================================================
+   C) JOURNEY ANIMATION
+   ========================================================================= */
+#journey{
+  --jline:#9aa0a6;
+  display:flex;align-items:center;justify-content:center;
+  background:radial-gradient(130% 90% at 50% -10%, #17203a 0%, #0b0f1a 60%, #070a12 100%);
+  color:#fff;padding:1.4rem;overflow:hidden;
+}
+/* tunnel speed lines rushing past, for a sense of motion */
+.speed-lines{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden;opacity:.6}
+.speed-lines::before,.speed-lines::after{
+  content:"";position:absolute;top:0;bottom:0;left:0;width:200%;will-change:transform;
+}
+.speed-lines::before{
+  background:repeating-linear-gradient(90deg,transparent 0 56px,rgba(130,185,255,.12) 56px 59px,transparent 59px 150px);
+  animation:rush 2.1s linear infinite;
+}
+.speed-lines::after{
+  background:repeating-linear-gradient(90deg,transparent 0 130px,rgba(255,196,120,.09) 130px 132px,transparent 132px 320px);
+  animation:rush 4.6s linear infinite;
+}
+@keyframes rush{from{transform:translate3d(0,0,0)}to{transform:translate3d(-50%,0,0)}}
+
+.journey-inner{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:1.15rem;width:100%}
+
+/* destination head board */
+.journey-head{
+  display:flex;align-items:center;gap:1rem;width:min(92vw,640px);
+  background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.09);
+  border-radius:16px;padding:.8rem 1.1rem;
+  box-shadow:0 10px 30px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.06);
+}
+.jline-badge{background:var(--jline);color:#fff;font-size:.92rem;letter-spacing:.02em;
+  padding:.35em 1em;border-radius:999px;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.35)}
+.jline-badge.on-light{color:#141414}
+.jhead-text{display:flex;flex-direction:column;line-height:1.12;min-width:0}
+.jhead-label{font-size:.68rem;letter-spacing:.22em;text-transform:uppercase;color:var(--grey-3)}
+.jhead-name{font-size:clamp(1.25rem,5vw,1.95rem);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* train carriage */
+.carriage{
+  position:relative;width:min(92vw,640px);padding:10px;overflow:hidden;border-radius:22px;
+  background:linear-gradient(180deg,#2a3346 0%,#1b2330 70%);
+  border:1px solid rgba(255,255,255,.09);
+  box-shadow:0 26px 60px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.1);
+}
+.carriage-roof{height:12px;margin:-10px -10px 10px;border-radius:22px 22px 0 0;
+  background:linear-gradient(180deg,#3c4556,#273041)}
+/* gentle rocking while the train is in motion */
+.carriage.riding{animation:sway 1.9s ease-in-out infinite}
+@keyframes sway{
+  0%,100%{transform:translateY(0) rotate(0)}
+  25%{transform:translateY(-1.5px) rotate(-.22deg)}
+  75%{transform:translateY(1.5px) rotate(.22deg)}
+}
+.carriage-windows{display:flex;gap:10px;margin-top:10px}
+.carriage-windows span{position:relative;flex:1;height:24px;border-radius:7px;overflow:hidden;
+  background:linear-gradient(180deg,rgba(150,200,255,.12),rgba(150,200,255,.03));
+  border:1px solid rgba(255,255,255,.07);box-shadow:inset 0 0 10px rgba(130,180,255,.08)}
+/* tunnel lights streaking past the windows while riding */
+.carriage-windows span::after{content:"";position:absolute;top:0;bottom:0;left:-45%;width:45%;
+  background:linear-gradient(90deg,transparent,rgba(180,215,255,.4),transparent)}
+.carriage.riding .carriage-windows span::after{animation:winlight 1.3s linear infinite}
+.carriage.riding .carriage-windows span:nth-child(2)::after{animation-delay:.18s}
+.carriage.riding .carriage-windows span:nth-child(3)::after{animation-delay:.36s}
+@keyframes winlight{to{left:120%}}
+/* sliding doors that open on arrival, revealing the platform strip */
+.carriage-doorway{position:relative;height:30px;margin-top:10px;border-radius:7px;overflow:hidden;
+  background:#10151e;border:1px solid rgba(255,255,255,.07)}
+.carriage-doorway .platform{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-size:.62rem;letter-spacing:.34em;color:#ffb000;text-shadow:0 0 6px rgba(255,176,0,.6);opacity:.9}
+.carriage-doorway .door{position:absolute;top:0;bottom:0;width:50%;
+  background:linear-gradient(180deg,#3c4556,#222a38);transition:transform .9s var(--ease)}
+.carriage-doorway .door-l{left:0;border-right:1px solid rgba(0,0,0,.5);box-shadow:2px 0 6px rgba(0,0,0,.4)}
+.carriage-doorway .door-r{right:0;border-left:1px solid rgba(0,0,0,.5);box-shadow:-2px 0 6px rgba(0,0,0,.4)}
+.carriage.arrived .door-l{transform:translateX(-100%)}
+.carriage.arrived .door-r{transform:translateX(100%)}
+
+/* LED dot-matrix display */
+.led{
+  --amber:#ffb000;
+  position:relative;background:#050300;border-radius:10px;
+  padding:16px 10px;overflow:hidden;border:2px solid #130e00;
+  box-shadow:inset 0 0 26px rgba(255,176,0,.14), 0 2px 10px rgba(0,0,0,.5);
+}
+.led::after{ /* scanlines */
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(0deg,rgba(0,0,0,.35) 0 1px,transparent 1px 3px);
+  mix-blend-mode:multiply;
+}
+/* split-flap departure board */
+.flap-board{position:relative;z-index:1;display:flex;flex-wrap:wrap;gap:3px;justify-content:center}
+.flap-cell{
+  min-width:.72em;height:1.5em;line-height:1.5em;padding:0 .1em;text-align:center;
+  font-size:clamp(1rem,4.2vw,1.7rem);letter-spacing:.02em;
+  font-family:"Hammersmith One",monospace;
+  color:var(--amber);text-shadow:0 0 6px rgba(255,176,0,.75),0 0 12px rgba(255,140,0,.45);
+  background:linear-gradient(180deg,#241a00 0%,#241a00 49%,#140e00 51%,#0d0900 100%);
+  border-radius:3px;
+  box-shadow:inset 0 0 0 1px rgba(255,176,0,.08),0 1px 2px rgba(0,0,0,.6);
+  transform-origin:center;will-change:transform;
+}
+.flap-cell.flip{animation:flapflip .14s ease}
+@keyframes flapflip{0%{transform:scaleY(1)}48%{transform:scaleY(.08)}52%{transform:scaleY(.08)}100%{transform:scaleY(1)}}
+
+/* journey progress bar */
+.journey-progress{position:relative;width:min(92vw,640px);height:9px;border-radius:999px;
+  background:rgba(255,255,255,.1);
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.45), 0 0 0 1px rgba(255,255,255,.06)}
+.journey-progress-fill{position:relative;height:100%;width:0;border-radius:999px;overflow:hidden;
+  background:var(--jline);
+  background-image:linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,.38));
+  box-shadow:0 0 14px var(--jline), 0 0 5px var(--jline)}
+.journey-progress-fill::before{ /* flowing diagonal stripes */
+  content:"";position:absolute;inset:0;
+  background:repeating-linear-gradient(45deg,rgba(255,255,255,.22) 0 9px,transparent 9px 18px);
+  background-size:26px 100%;animation:barstripes .7s linear infinite}
+@keyframes barstripes{to{background-position:26px 0}}
+
+/* mini line view with moving train */
+.line-view{width:min(92vw,640px);background:rgba(255,255,255,.045);
+  border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:12px 14px}
+.line-view svg{width:100%;height:120px;display:block}
+.train-dot{filter:drop-shadow(0 0 7px rgba(255,255,255,.6))}
+
+.journey-status{font-size:1.1rem;color:#e7eaef;letter-spacing:.03em;min-height:1.5em;text-align:center}
+.journey-status.arriving{color:#fff}
+.journey-status.arriving::before{content:"● ";color:var(--jline)}
+.journey-cta{display:flex;gap:.8rem;flex-wrap:wrap;justify-content:center;opacity:0;transform:translateY(6px);
+  transition:opacity .5s,transform .5s}
+.journey-cta.show{opacity:1;transform:translateY(0)}
+
+@media (prefers-reduced-motion:reduce){
+  .flap-cell.flip{animation:none}
+  .carriage.riding{animation:none}
+  .carriage.riding .carriage-windows span::after{animation:none}
+  .carriage-doorway .door{transition:none}
+  .journey-progress-fill::before{animation:none}
+  .speed-lines::before,.speed-lines::after{animation:none}
+}
+
+/* =========================================================================
+   D) STATION DETAIL
+   ========================================================================= */
+#detail{overflow-y:auto;background:var(--grey-1)}
+.detail-inner{max-width:860px;margin:0 auto;padding:0 0 4rem}
+.detail-hero{position:relative;width:100%;height:min(42vh,340px);background:var(--grey-2);overflow:hidden}
+.detail-hero img{width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .6s}
+.detail-hero img.loaded{opacity:1}
+.hero-skeleton{position:absolute;inset:0;background:linear-gradient(100deg,#e3e6ea 30%,#f0f2f4 50%,#e3e6ea 70%);background-size:200% 100%;animation:shimmer 1.3s infinite}
+@keyframes shimmer{to{background-position:-200% 0}}
+.hero-fallback{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:var(--grey-2)}
+.hero-credit{position:absolute;right:8px;bottom:8px;background:rgba(0,0,0,.55);color:#fff;font-size:.68rem;padding:.2em .6em;border-radius:4px}
+.detail-back{position:absolute;top:12px;left:12px;z-index:5}
+
+/* Roundel name board */
+.nameboard{
+  display:flex;align-items:center;justify-content:center;
+  margin:-34px auto 0;position:relative;z-index:2;
+  background:#fff;border-radius:12px;box-shadow:var(--shadow);
+  padding:.7em 1.4em;max-width:92%;gap:1rem;
+}
+/* Station nameboard styled as the Underground roundel: a red ring with the
+   station name on a blue bar running through its centre. */
+.roundel-sign{position:relative;display:flex;align-items:center;justify-content:center;
+  width:100%;min-height:78px}
+.roundel-sign .ring{
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:78px;height:78px;border-radius:50%;box-sizing:border-box;
+  border:12px solid var(--red);z-index:1;pointer-events:none;
+}
+.nameboard .bar{position:relative;z-index:2;background:var(--blue);color:#fff;
+  padding:.32em 1.2em;border-radius:3px;box-shadow:0 1px 5px rgba(0,0,0,.22);
+  font-size:clamp(1.3rem,5vw,2rem);letter-spacing:.02em;text-align:center}
+
+.detail-body{padding:1.4rem 1.2rem 0}
+.fact-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.8rem;margin:1rem 0}
+.fact{background:#fff;border-radius:10px;padding:.8em;box-shadow:0 2px 8px rgba(0,0,0,.05)}
+.fact .k{font-size:.72rem;color:var(--grey-4);text-transform:uppercase;letter-spacing:.06em}
+.fact .v{font-size:1.05rem;margin-top:.2em}
+.line-badges{display:flex;flex-wrap:wrap;gap:.4rem;margin:.3rem 0 1rem}
+.section-h{color:var(--blue);font-size:1.25rem;margin:1.4rem 0 .5rem}
+.extract{line-height:1.6;color:#23262b;white-space:pre-line}
+.station-desc{text-align:center;color:var(--grey-4);font-style:italic;margin:.55rem 1rem 0;font-size:.95rem}
+.station-desc:empty{display:none}
+/* lines & connections rows */
+.conn-row{display:flex;flex-direction:column;gap:.45rem;padding:.7rem .8rem;background:#fff;
+  border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.05);margin-bottom:.55rem}
+.conn-head{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
+.conn-ends{color:var(--grey-4);font-size:.85rem}
+.conn-neighbours{display:flex;flex-wrap:wrap;gap:.4rem}
+.conn-pill{background:var(--grey-1);border:1.5px solid var(--grey-2);border-radius:999px;
+  padding:.28em .85em;font-size:.82rem;cursor:pointer;color:var(--blue);
+  transition:background .15s,transform .15s}
+.conn-pill:hover{background:var(--grey-2);transform:translateY(-1px)}
+.detail-links{display:flex;flex-wrap:wrap;gap:1.2rem;margin-top:1.4rem}
+.chip-list{display:flex;flex-wrap:wrap;gap:.4rem;margin:.4rem 0}
+.pill{background:#fff;border:1.5px solid var(--grey-2);border-radius:999px;padding:.25em .8em;font-size:.85rem}
+.stepfree{display:inline-flex;align-items:center;gap:.4em;font-size:.95rem}
+.stepfree .badge{width:22px;height:22px;border-radius:50%;background:var(--district);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:.8rem}
+.stepfree.no .badge{background:var(--grey-3)}
+.detail-nav{display:flex;gap:.7rem;flex-wrap:wrap;margin-top:1.8rem}
+
+/* ---- Audio / mute toggle (global) ----------------------------------- */
+#mute{
+  position:fixed;top:12px;right:12px;z-index:200;
+  width:44px;height:44px;border-radius:50%;background:#fff;
+  box-shadow:var(--shadow);color:var(--blue);display:flex;align-items:center;justify-content:center;
+}
+#mute:active{transform:scale(.92)}
+#mute svg{width:22px;height:22px}
+
+/* ---- Language toggle (global) --------------------------------------- */
+#lang{
+  position:fixed;top:12px;right:64px;z-index:200;
+  height:44px;min-width:44px;padding:0 .75em;border-radius:22px;background:#fff;
+  box-shadow:var(--shadow);color:var(--blue);
+  display:flex;align-items:center;justify-content:center;
+  font-size:.98rem;letter-spacing:.03em;
+}
+#lang:active{transform:scale(.92)}
+
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
+
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:var(--grey-3);border-radius:8px}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ===== Global mute toggle ===== -->
+  <button id="mute" aria-label="Mute sound" aria-pressed="false" title="Mute / unmute"></button>
+
+  <!-- ===== Language toggle ===== -->
+  <button id="lang" aria-label="切換為中文" title="中 / EN">中</button>
+
+  <!-- ================= A) HOME ================= -->
+  <section id="home" class="screen active" aria-label="Home">
+    <div class="home-bg" aria-hidden="true">
+      <svg viewBox="0 0 1000 700" preserveAspectRatio="xMidYMid slice">
+        <g class="home-lines">
+          <g stroke="#ffffff" stroke-width="15" fill="none" opacity=".55">
+            <path d="M-60 130 C 200 70 400 210 700 150 S 1060 130 1100 170"/>
+            <path d="M-60 250 C 250 310 520 200 790 280 S 1060 250 1100 230"/>
+            <path d="M-60 370 C 180 440 470 300 760 400 S 1060 360 1100 340"/>
+            <path d="M-60 500 C 220 440 430 580 720 510 S 1060 540 1100 500"/>
+            <path d="M-60 600 C 160 660 480 540 780 620 S 1060 600 1100 580"/>
+          </g>
+          <path d="M-60 130 C 200 70 400 210 700 150 S 1060 130 1100 170" stroke="#E32017" stroke-width="8" fill="none"/>
+          <path d="M-60 250 C 250 310 520 200 790 280 S 1060 250 1100 230" stroke="#FFD300" stroke-width="8" fill="none"/>
+          <path d="M-60 370 C 180 440 470 300 760 400 S 1060 360 1100 340" stroke="#0019A8" stroke-width="8" fill="none"/>
+          <path d="M-60 500 C 220 440 430 580 720 510 S 1060 540 1100 500" stroke="#00782A" stroke-width="8" fill="none"/>
+          <path d="M-60 600 C 160 660 480 540 780 620 S 1060 600 1100 580" stroke="#6950A1" stroke-width="8" fill="none"/>
+        </g>
+      </svg>
+    </div>
+    <svg class="home-roundel" viewBox="0 0 200 160" role="img" aria-label="London Underground roundel">
+      <circle class="draw-ring" cx="100" cy="80" r="58" fill="none" stroke="#DC241F" stroke-width="18"
+              pathLength="1" transform="rotate(-90 100 80)"/>
+      <rect class="fade-bar" x="20" y="66" width="160" height="28" fill="#0019A8"/>
+      <text class="fade-text" x="100" y="86" text-anchor="middle" fill="#fff" font-size="20"
+            font-family="Hammersmith One">UNDERGROUND</text>
+    </svg>
+    <h1 class="fade-text" data-i18n="title">London Underground</h1>
+    <p class="subtitle fade-text" data-i18n="subtitle">Mind the gap. Explore the Tube network, ride the line and arrive in style — the way London does it.</p>
+    <div class="start-row fade-text">
+      <button class="tfl-sign" id="startBtn" data-i18n="start">Start Journey →</button>
+    </div>
+  </section>
+
+  <!-- ================= B) MAP / SELECTION ================= -->
+  <section id="map-screen" class="screen" aria-label="Tube map and station selection">
+    <div class="map-topbar">
+      <div class="row1">
+        <svg class="mini-roundel" viewBox="0 0 200 160" aria-hidden="true">
+          <circle cx="100" cy="80" r="58" fill="none" stroke="#DC241F" stroke-width="20"/>
+          <rect x="20" y="66" width="160" height="28" fill="#0019A8"/>
+        </svg>
+        <span class="map-title" data-i18n="chooseStation">Choose your station</span>
+        <div class="search-wrap">
+          <input id="search" type="text" placeholder="Search stations…" data-i18n-ph="searchPlaceholder" autocomplete="off"
+                 aria-label="Search stations" role="combobox" aria-expanded="false" aria-controls="autocomplete">
+          <div class="autocomplete" id="autocomplete" role="listbox"></div>
+        </div>
+      </div>
+      <div class="chips" id="chips" role="group" aria-label="Filter by line"></div>
+    </div>
+    <div class="map-stage" id="mapStage">
+      <div class="paper-decor" id="paperDecor" aria-hidden="true"></div>
+      <div class="map-viewport" id="mapViewport">
+        <svg id="tube-map" xmlns="http://www.w3.org/2000/svg"></svg>
+        <div class="map-hint" id="mapHint" data-i18n="mapHint">Scroll to zoom · drag to pan · click a station to ride</div>
+        <div class="zoom-ctrls">
+          <button id="zoomIn" aria-label="Zoom in">+</button>
+          <button id="zoomOut" aria-label="Zoom out">−</button>
+          <button id="zoomReset" aria-label="Reset view" style="font-size:.9rem">⤢</button>
+        </div>
+      </div>
+      <div id="tooltip" role="tooltip"></div>
+    </div>
+  </section>
+
+  <!-- ================= C) JOURNEY ================= -->
+  <section id="journey" class="screen" aria-label="Journey in progress" aria-live="polite">
+    <div class="speed-lines" aria-hidden="true"></div>
+    <div class="journey-inner">
+
+      <div class="journey-head">
+        <span class="jline-badge" id="journeyLineName">Line</span>
+        <div class="jhead-text">
+          <span class="jhead-label" data-i18n="nextStation">Next station</span>
+          <span class="jhead-name" id="journeyStationName">—</span>
+        </div>
+      </div>
+
+      <div class="carriage">
+        <div class="carriage-roof"></div>
+        <div class="led">
+          <div class="flap-board" id="flapBoard" aria-hidden="true"></div>
+        </div>
+        <div class="carriage-windows" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div class="carriage-doorway" aria-hidden="true">
+          <div class="platform" data-i18n="mindGap">MIND THE GAP</div>
+          <div class="door door-l"></div>
+          <div class="door door-r"></div>
+        </div>
+      </div>
+
+      <div class="journey-progress"><div class="journey-progress-fill" id="journeyProgressFill"></div></div>
+
+      <div class="line-view">
+        <svg id="lineViewSvg" viewBox="0 0 600 120" preserveAspectRatio="xMidYMid meet"></svg>
+      </div>
+
+      <div class="journey-status" id="journeyStatus">Departing…</div>
+      <div class="journey-cta" id="journeyCta">
+        <button class="tfl-sign" id="arriveBtn" data-i18n="arriveBtn">Arrive at station →</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= D) STATION DETAIL ================= -->
+  <section id="detail" class="screen" aria-label="Station information">
+    <div class="detail-inner">
+      <div class="detail-hero" id="hero">
+        <button class="tfl-sign secondary detail-back" id="backBtn" data-i18n="backMap">← Map</button>
+        <div class="hero-skeleton" id="heroSkeleton"></div>
+      </div>
+      <div class="nameboard">
+        <div class="roundel-sign">
+          <span class="ring" aria-hidden="true"></span>
+          <span class="bar" id="nbName">STATION</span>
+        </div>
+      </div>
+      <p class="station-desc" id="stationDesc"></p>
+      <div class="detail-body">
+        <div class="line-badges" id="detailLines"></div>
+        <div class="fact-grid" id="factGrid"></div>
+
+        <h2 class="section-h" data-i18n="aboutStation">About this station</h2>
+        <p class="extract" id="extract" data-i18n="loading">Loading information…</p>
+
+        <h2 class="section-h" data-i18n="linesConnections">Lines &amp; connections</h2>
+        <div id="interchanges"></div>
+
+        <h2 class="section-h" data-i18n="landmarks">Nearby landmarks</h2>
+        <div class="chip-list" id="landmarks"></div>
+
+        <h2 class="section-h" data-i18n="accessibility">Accessibility</h2>
+        <div id="stepfreeWrap"></div>
+
+        <div class="detail-links">
+          <a id="wikiLink" href="#" target="_blank" rel="noopener" data-i18n="readMore">Read more on Wikipedia ↗</a>
+          <a id="mapLink" href="#" target="_blank" rel="noopener" data-i18n="openMaps" style="display:none">Open in Google Maps ↗</a>
+        </div>
+
+        <div class="detail-nav">
+          <button class="tfl-sign secondary" id="prevStation">← Previous station</button>
+          <button class="tfl-sign secondary" id="nextStation">Next station →</button>
+          <button class="tfl-sign" id="backToMap" data-i18n="backToMap">Back to map</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+"use strict";
+/* =========================================================================
+   DATA
+   Beck-style schematic coordinates on a 1000 x 720 canvas.
+   A curated but network-wide dataset: every line is represented with its
+   key stations and termini in order, so next/previous and the train path
+   work correctly.  Interchanges are flagged for the white-ring markers.
+   ========================================================================= */
+
+const LINES = {
+  bakerloo:    {name:"Bakerloo",            colour:"#B36305", textName:"Bakerloo"},
+  central:     {name:"Central",             colour:"#E32017", textName:"Central"},
+  circle:      {name:"Circle",              colour:"#FFD300", textName:"Circle", light:true},
+  district:    {name:"District",            colour:"#00782A", textName:"District"},
+  hc:          {name:"Hammersmith & City",  colour:"#F3A9BB", textName:"Hammersmith & City", light:true},
+  jubilee:     {name:"Jubilee",             colour:"#A0A5A9", textName:"Jubilee"},
+  metropolitan:{name:"Metropolitan",        colour:"#9B0056", textName:"Metropolitan"},
+  northern:    {name:"Northern",            colour:"#000000", textName:"Northern"},
+  piccadilly:  {name:"Piccadilly",          colour:"#003688", textName:"Piccadilly"},
+  victoria:    {name:"Victoria",            colour:"#0098D4", textName:"Victoria"},
+  wc:          {name:"Waterloo & City",     colour:"#95CDBA", textName:"Waterloo & City", light:true},
+  elizabeth:   {name:"Elizabeth line",      colour:"#6950A1", textName:"Elizabeth"},
+};
+
+/* --- Stations.  x,y on 1000x720 Beck canvas. ----------------------------
+   Fields: id,name,lines[],zone,opened,interchange,stepFree,landmarks[],x,y   */
+const S = {};
+function st(id,name,lines,zone,opened,interchange,stepFree,landmarks,x,y){
+  S[id]={id,name,lines,zone,opened,interchange,stepFree,landmarks,x,y};
+}
+
+/* Central spine & interchanges */
+st("paddington","Paddington",["bakerloo","circle","district","hc","elizabeth"],1,1863,true,true,["Paddington Station","Little Venice","Hyde Park"],150,250);
+st("bakerst","Baker Street",["bakerloo","circle","hc","jubilee","metropolitan"],1,1863,true,false,["Madame Tussauds","Regent's Park","Sherlock Holmes Museum"],300,230);
+st("oxfordcircus","Oxford Circus",["bakerloo","central","victoria"],1,1900,true,false,["Oxford Street","Regent Street","Liberty"],430,290);
+st("piccadillycircus","Piccadilly Circus",["bakerloo","piccadilly"],1,1906,true,false,["Eros statue","Shaftesbury Avenue","West End theatres"],450,350);
+st("charingcross","Charing Cross",["bakerloo","northern"],1,1906,true,true,["Trafalgar Square","National Gallery","The Strand"],470,400);
+st("embankment","Embankment",["bakerloo","circle","district","northern"],1,1870,true,false,["River Thames","Victoria Embankment Gardens","Cleopatra's Needle"],490,440);
+st("waterloo","Waterloo",["bakerloo","jubilee","northern","wc"],1,1898,true,true,["London Eye","Southbank Centre","Waterloo Station"],520,480);
+st("elephant","Elephant & Castle",["bakerloo","northern"],"1,2",1890,true,true,["Elephant Park","Imperial War Museum"],540,560);
+
+/* Victoria line */
+st("brixton","Brixton",["victoria"],2,1971,false,true,["Brixton Market","O2 Academy Brixton"],560,660);
+st("vauxhall","Vauxhall",["victoria"],"1,2",1971,true,true,["MI6 Building","Vauxhall City Farm"],500,560);
+st("victoria","Victoria",["victoria","circle","district"],1,1868,true,true,["Buckingham Palace","Victoria Station","Westminster Cathedral"],420,470);
+st("greenpark","Green Park",["victoria","piccadilly","jubilee"],1,1906,true,true,["Green Park","Buckingham Palace","The Ritz"],400,370);
+st("warrenst","Warren Street",["victoria","northern"],1,1907,true,false,["Fitzrovia","UCL"],420,230);
+st("eustonvic","Euston",["victoria","northern"],1,1907,true,true,["Euston Station","British Library nearby"],430,190);
+st("kingscross","King's Cross St. Pancras",["victoria","circle","hc","metropolitan","northern","piccadilly"],1,1863,true,true,["King's Cross Station","St Pancras International","British Library"],470,180);
+st("highburyvic","Highbury & Islington",["victoria"],2,1904,true,true,["Highbury Fields","Arsenal nearby"],540,150);
+st("finsburyvic","Finsbury Park",["victoria","piccadilly"],2,1904,true,true,["Finsbury Park","Emirates Stadium"],560,110);
+st("walthamstow","Walthamstow Central",["victoria"],3,1968,true,true,["Walthamstow Market","God's Own Junkyard"],640,60);
+
+/* Central line (W-E) */
+st("ealing","Ealing Broadway",["central","district","elizabeth"],3,1879,true,true,["Ealing Studios","Walpole Park"],60,300);
+st("nottinghill","Notting Hill Gate",["central","circle","district"],"1,2",1868,true,false,["Portobello Road Market","Notting Hill"],230,300);
+st("bondst","Bond Street",["central","jubilee","elizabeth"],1,1900,true,true,["Selfridges","Mayfair","Bond Street shops"],390,290);
+st("tottenham","Tottenham Court Road",["central","northern","elizabeth"],1,1900,true,true,["British Museum","Soho","Denmark Street"],450,270);
+st("holborn","Holborn",["central","piccadilly"],1,1906,true,false,["Sir John Soane's Museum","Lincoln's Inn Fields"],500,270);
+st("bank","Bank",["central","northern","wc","dlr"],1,1900,true,false,["Bank of England","Royal Exchange","Mansion House"],620,340);
+st("liverpoolst","Liverpool Street",["central","circle","hc","metropolitan","elizabeth"],1,1875,true,true,["Liverpool Street Station","Spitalfields Market","Broadgate"],660,290);
+st("stratford","Stratford",["central","jubilee","elizabeth","dlr"],"2,3",1946,true,true,["Queen Elizabeth Olympic Park","Westfield Stratford","London Stadium"],780,230);
+st("epping","Epping",["central"],6,1865,false,true,["Epping Forest"],900,120);
+st("whitecity","White City",["central"],2,1947,false,true,["Westfield London","BBC Television Centre"],180,270);
+
+/* Northern line (key) */
+st("morden","Morden",["northern"],4,1926,false,true,["Morden Hall Park"],500,680);
+st("claphamcommon","Clapham Common",["northern"],2,1900,false,false,["Clapham Common","The Pavement"],470,600);
+st("stockwell","Stockwell",["northern","victoria"],2,1890,true,true,["Stockwell War Memorial"],500,610);
+st("kennington","Kennington",["northern"],2,1890,true,true,["Kennington Park","The Oval nearby"],520,540);
+st("londonbridge","London Bridge",["northern","jubilee"],1,1900,true,true,["The Shard","Borough Market","HMS Belfast"],600,420);
+st("moorgate","Moorgate",["northern","circle","hc","metropolitan","elizabeth"],1,1865,true,true,["Barbican nearby","Finsbury Square"],610,300);
+st("angel","Angel",["northern"],1,1901,true,true,["Angel Islington","Chapel Market"],500,210);
+st("camden","Camden Town",["northern"],2,1907,true,false,["Camden Market","Regent's Canal"],410,150);
+st("highbarnet","High Barnet",["northern"],5,1872,false,true,["Barnet"],430,40);
+st("edgware","Edgware",["northern"],5,1924,false,true,["Edgware"],330,40);
+
+/* Piccadilly line (key) */
+st("heathrow","Heathrow Terminals 2 & 3",["piccadilly","elizabeth"],6,1977,true,true,["Heathrow Airport"],40,470);
+st("hammersmith","Hammersmith",["piccadilly","district","hc","circle"],2,1874,true,true,["Hammersmith Apollo","Riverside Studios"],170,340);
+st("southken","South Kensington",["piccadilly","circle","district"],1,1868,true,false,["Natural History Museum","V&A Museum","Science Museum"],300,400);
+st("knightsbridge","Knightsbridge",["piccadilly"],1,1906,false,false,["Harrods","Hyde Park"],350,380);
+st("leicestersq","Leicester Square",["piccadilly","northern"],1,1906,true,false,["Leicester Square","Chinatown","West End cinemas"],460,320);
+st("coventgdn","Covent Garden",["piccadilly"],1,1907,false,false,["Covent Garden Market","Royal Opera House","London Transport Museum"],480,300);
+st("russellsq","Russell Square",["piccadilly"],1,1906,false,true,["Russell Square","British Museum nearby"],470,240);
+st("cockfosters","Cockfosters",["piccadilly"],5,1933,false,true,["Trent Park"],620,40);
+
+/* Jubilee line (key) */
+st("stanmore","Stanmore",["jubilee"],5,1932,false,true,["Stanmore"],250,40);
+st("wembleypark","Wembley Park",["jubilee","metropolitan"],4,1894,true,true,["Wembley Stadium","Wembley Arena","Boxpark"],240,120);
+st("westminster","Westminster",["jubilee","circle","district"],1,1868,true,true,["Big Ben","Houses of Parliament","Westminster Abbey"],470,450);
+st("southwark","Southwark",["jubilee"],1,1999,true,true,["Tate Modern","Shakespeare's Globe"],560,450);
+st("canarywharf","Canary Wharf",["jubilee","elizabeth","dlr"],2,1999,true,true,["Canary Wharf","One Canada Square","West India Quay"],820,400);
+st("northgreenwich","North Greenwich",["jubilee"],"2,3",1999,true,true,["The O2 Arena","Greenwich Peninsula"],820,470);
+st("stratfordjub","West Ham",["jubilee","district","hc","dlr"],3,1901,true,true,["West Ham"],760,370);
+
+/* Circle / District / H&C extras */
+st("edgwareroad","Edgware Road",["circle","district","hc","bakerloo"],1,1863,true,true,["Marylebone nearby"],230,250);
+st("greatportland","Great Portland Street",["circle","hc","metropolitan"],1,1863,true,true,["Regent's Park","BT Tower"],360,220);
+st("euston_sq","Euston Square",["circle","hc","metropolitan"],1,1863,true,false,["UCL","Euston nearby"],410,205);
+st("farringdon","Farringdon",["circle","hc","metropolitan","elizabeth"],1,1863,true,true,["Smithfield Market","Barbican nearby"],540,270);
+st("aldgate","Aldgate",["circle","metropolitan"],1,1876,true,true,["Aldgate","Whitechapel nearby"],690,330);
+st("towerhill","Tower Hill",["circle","district"],1,1882,true,true,["Tower of London","Tower Bridge"],660,380);
+st("monument","Monument",["circle","district"],1,1884,true,false,["The Monument","Pudding Lane"],630,370);
+st("blackfriars","Blackfriars",["circle","district"],1,1870,true,true,["Tate Modern nearby","Millennium Bridge"],560,400);
+st("stjames","St. James's Park",["circle","district"],1,1868,true,true,["St James's Park","Buckingham Palace"],440,440);
+st("sloanesq","Sloane Square",["circle","district"],1,1868,true,false,["Saatchi Gallery","King's Road","Sloane Square"],370,440);
+st("earlscourt","Earl's Court",["district","piccadilly"],"1,2",1871,true,true,["Earl's Court","Troubadour nearby"],230,380);
+st("wimbledon","Wimbledon",["district"],3,1889,true,true,["Wimbledon (All England Club)","Wimbledon Common"],330,620);
+st("richmond","Richmond",["district"],4,1877,true,true,["Richmond Park","Kew Gardens nearby","River Thames"],60,420);
+st("upminster","Upminster",["district"],6,1902,false,true,["Upminster Windmill"],940,340);
+st("barking","Barking",["district","hc"],4,1908,true,true,["Barking","Abbey ruins"],850,340);
+st("hammersmithhc","Hammersmith (H&C)",["hc","circle"],2,1864,true,true,["Hammersmith"],170,320);
+
+/* Metropolitan line (key) */
+st("amersham","Amersham",["metropolitan"],9,1892,false,true,["Amersham Old Town","Chiltern Hills"],100,40);
+st("harrow","Harrow-on-the-Hill",["metropolitan"],5,1880,true,true,["Harrow School","Harrow-on-the-Hill"],180,80);
+st("finchleyroad","Finchley Road",["metropolitan","jubilee"],2,1879,true,false,["O2 Centre","Hampstead nearby"],310,150);
+
+/* Waterloo & City — just Bank & Waterloo (both above) */
+
+/* Elizabeth line extras */
+st("abbeywood","Abbey Wood",["elizabeth"],4,2022,true,true,["Lesnes Abbey","Thamesmead"],900,470);
+st("woolwich","Woolwich",["elizabeth","dlr"],4,2022,true,true,["Royal Arsenal","Woolwich Ferry"],860,450);
+st("whitechapel","Whitechapel",["elizabeth","district","hc"],2,1876,true,true,["Whitechapel Gallery","Brick Lane"],700,310);
+st("readingdir","Reading",["elizabeth"],9,2022,false,true,["Reading"],20,250);
+
+/* --- Ordered line sequences (for next/prev & train path) --------------- */
+const LINE_SEQ = {
+  bakerloo:   ["paddington","edgwareroad","bakerst","oxfordcircus","piccadillycircus","charingcross","embankment","waterloo","elephant"],
+  central:    ["ealing","whitecity","nottinghill","bondst","oxfordcircus","tottenham","holborn","bank","liverpoolst","stratford","epping"],
+  circle:     ["paddington","edgwareroad","bakerst","greatportland","euston_sq","kingscross","farringdon","moorgate","liverpoolst","aldgate","towerhill","monument","blackfriars","embankment","westminster","stjames","victoria","sloanesq","southken","nottinghill"],
+  district:   ["richmond","hammersmith","earlscourt","southken","sloanesq","victoria","stjames","westminster","embankment","blackfriars","monument","towerhill","whitechapel","barking","upminster"],
+  hc:         ["hammersmithhc","edgwareroad","bakerst","greatportland","euston_sq","kingscross","farringdon","moorgate","liverpoolst","aldgate","whitechapel","barking"],
+  jubilee:    ["stanmore","wembleypark","finchleyroad","bakerst","greenpark","westminster","waterloo","southwark","londonbridge","stratfordjub","canarywharf","northgreenwich","stratford"],
+  metropolitan:["amersham","harrow","wembleypark","finchleyroad","bakerst","greatportland","euston_sq","kingscross","farringdon","moorgate","liverpoolst","aldgate"],
+  northern:   ["morden","claphamcommon","stockwell","kennington","elephant","waterloo","charingcross","embankment","londonbridge","bank","moorgate","angel","kingscross","eustonvic","warrenst","camden","edgware"],
+  piccadilly: ["heathrow","hammersmith","earlscourt","southken","knightsbridge","greenpark","piccadillycircus","leicestersq","coventgdn","holborn","russellsq","kingscross","finsburyvic","cockfosters"],
+  victoria:   ["brixton","stockwell","vauxhall","victoria","greenpark","oxfordcircus","warrenst","eustonvic","kingscross","highburyvic","finsburyvic","walthamstow"],
+  wc:         ["waterloo","bank"],
+  elizabeth:  ["readingdir","heathrow","ealing","paddington","bondst","tottenham","farringdon","liverpoolst","whitechapel","canarywharf","woolwich","abbeywood","stratford","moorgate"],
+};
+
+/* Branch spurs that a single ordered array can't express (true forks).
+   Drawn as short coloured stubs connecting a terminus to the trunk. */
+const BRANCHES=[
+  {line:"northern",  from:"camden",     to:"highbarnet"},  // High Barnet branch
+  {line:"district",  from:"earlscourt", to:"wimbledon"},   // Wimbledon branch
+];
+/* Terminus-on-a-stub → its inward neighbour, so next/previous & the journey
+   view still work for stations that live on a branch spur. */
+const STUBS={
+  highbarnet:{line:"northern",  inward:"camden"},
+  wimbledon: {line:"district",  inward:"earlscourt"},
+};
+
+/* =========================================================================
+   STATE
+   ========================================================================= */
+const state = {
+  activeLineFilter:null,
+  muted:false,
+  lang:"en",                // UI language: "en" | "zh"
+  currentStation:null,
+  currentLine:null,
+  audioCtx:null,
+  view:{x:0,y:0,scale:1},   // map transform
+};
+const apiCache = new Map();
+
+/* =========================================================================
+   UTILITIES
+   ========================================================================= */
+const $  = (s,r=document)=>r.querySelector(s);
+const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
+const NS = "http://www.w3.org/2000/svg";
+const el = (tag,attrs={})=>{const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);return e;};
+const reduceMotion = window.matchMedia("(prefers-reduced-motion:reduce)").matches;
+/* tiny deterministic PRNG so the decorative street grid is stable across loads */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+
+function linesOf(id){return S[id].lines.filter(l=>LINES[l]);}
+function zoneLabel(z){return String(z).replace(/,/g,"/");}
+
+/* =========================================================================
+   INTERNATIONALISATION (English / 繁體中文)
+   Station names, Wikipedia extracts and the spoken announcement stay in
+   English (proper nouns / en-GB PA); everything else in the UI switches.
+   ========================================================================= */
+const I18N={
+  en:{
+    title:"London Underground",
+    subtitle:"Mind the gap. Explore the Tube network, ride the line and arrive in style — the way London does it.",
+    start:"Start Journey →",
+    chooseStation:"Choose your station",
+    searchPlaceholder:"Search stations…",
+    allLines:"All lines",
+    mapHint:"Scroll to zoom · drag to pan · click a station to ride",
+    nextStation:"Next station",
+    departing:"Departing…",
+    arriving:"Now arriving at {name}",
+    arriveBtn:"Arrive at station →",
+    mindGap:"MIND THE GAP",
+    aboutStation:"About this station",
+    interchanges:"Interchanges",
+    landmarks:"Nearby landmarks",
+    accessibility:"Accessibility",
+    fareZone:"Fare zone",
+    opened:"Opened",
+    linesLabel:"Lines",
+    interchangeLabel:"Interchange",
+    yes:"Yes", no:"No",
+    stepFreeYes:"Step-free access available",
+    stepFreeNo:"No step-free access (stairs/escalators only)",
+    singleLine:"This station serves a single line",
+    readMore:"Read more on Wikipedia ↗",
+    loading:"Loading information…",
+    prevStart:"← Start of line",
+    nextEnd:"End of line →",
+    backMap:"← Map",
+    backToMap:"Back to map",
+    zone:"Zone",
+    interchangeWord:"Interchange",
+    linesConnections:"Lines & connections",
+    openMaps:"Open in Google Maps ↗",
+    inService:"In service",
+    yearsUnit:"yrs",
+  },
+  zh:{
+    title:"倫敦地鐵",
+    subtitle:"小心月台間隙。探索地鐵路網、搭上路線，以倫敦的方式抵達目的地。",
+    start:"開始旅程 →",
+    chooseStation:"選擇車站",
+    searchPlaceholder:"搜尋車站…",
+    allLines:"全部路線",
+    mapHint:"滾動縮放 · 拖曳平移 · 點選車站搭乘",
+    nextStation:"下一站",
+    departing:"發車中…",
+    arriving:"即將抵達 {name}",
+    arriveBtn:"抵達車站 →",
+    mindGap:"小心月台間隙",
+    aboutStation:"關於本站",
+    interchanges:"轉乘路線",
+    landmarks:"附近地標",
+    accessibility:"無障礙設施",
+    fareZone:"票價區",
+    opened:"啟用年份",
+    linesLabel:"路線數",
+    interchangeLabel:"轉乘站",
+    yes:"是", no:"否",
+    stepFreeYes:"設有無障礙通道",
+    stepFreeNo:"無無障礙通道（僅樓梯／電扶梯）",
+    singleLine:"本站僅停靠單一路線",
+    readMore:"在維基百科閱讀更多 ↗",
+    loading:"載入資訊中…",
+    prevStart:"← 已是起點",
+    nextEnd:"終點站 →",
+    backMap:"← 地圖",
+    backToMap:"返回地圖",
+    zone:"票價區",
+    interchangeWord:"轉乘站",
+    linesConnections:"路線與連接",
+    openMaps:"在 Google 地圖開啟 ↗",
+    inService:"營運年數",
+    yearsUnit:"年",
+  },
+};
+const LINE_ZH={
+  bakerloo:"貝克盧線", central:"中央線", circle:"環線", district:"區域線",
+  hc:"漢默史密斯及城市線", jubilee:"銀禧線", metropolitan:"大都會線", northern:"北線",
+  piccadilly:"皮卡迪利線", victoria:"維多利亞線", wc:"滑鐵盧及城市線",
+  elizabeth:"伊莉莎白線", dlr:"碼頭區輕軌",
+};
+const T=k=>{const d=I18N[state.lang]||I18N.en; return d[k]!=null?d[k]:(I18N.en[k]!=null?I18N.en[k]:k);};
+function lineName(key){return state.lang==="zh"&&LINE_ZH[key]?LINE_ZH[key]:(LINES[key]?LINES[key].name:key);}
+function zoneText(z){return state.lang==="zh"?`${zoneLabel(z)} ${T("zone")}`:`${T("zone")} ${zoneLabel(z)}`;}
+
+/* Apply the current language to all static [data-i18n] text + placeholders. */
+function applyStaticLang(){
+  $$("[data-i18n]").forEach(e=>{const v=T(e.dataset.i18n); if(v!=null)e.textContent=v;});
+  $$("[data-i18n-ph]").forEach(e=>{const v=T(e.dataset.i18nPh); if(v!=null)e.placeholder=v;});
+}
+
+/* Switch language and live-refresh whatever is on screen. */
+function setLang(lang){
+  state.lang=lang;
+  document.documentElement.lang = lang==="zh"?"zh-Hant":"en";
+  applyStaticLang();
+  const filter=state.activeLineFilter;
+  buildChips(); setLineFilter(filter);           // rebuild chips, keep filter
+  const langBtn=$("#lang");
+  langBtn.textContent = lang==="zh"?"EN":"中";
+  langBtn.setAttribute("aria-label", lang==="zh"?"Switch to English":"切換為中文");
+  const active=$(".screen.active")?.id;
+  if(active==="detail" && state.currentStation) openDetail(state.currentStation);
+  else if(active==="journey" && state.currentLine){
+    $("#journeyLineName").textContent=lineName(state.currentLine);
+    const st=$("#journeyStatus");
+    if(st.classList.contains("arriving") && state.currentStation)
+      st.textContent=T("arriving").replace("{name}",S[state.currentStation].name);
+  }
+}
+
+/* =========================================================================
+   SCREEN MANAGEMENT
+   ========================================================================= */
+function show(id){
+  $$(".screen").forEach(s=>s.classList.remove("active"));
+  const target=$("#"+id);
+  target.classList.add("active");
+  // move focus for accessibility
+  const h=target.querySelector("h1,h2,[tabindex],button");
+  if(h) setTimeout(()=>h.focus?.({preventScroll:true}),420);
+}
+
+/* =========================================================================
+   AUDIO — Web Audio chime + Web Speech announcements
+   ========================================================================= */
+function ensureAudio(){
+  if(!state.audioCtx){
+    try{state.audioCtx=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}
+  }
+  if(state.audioCtx && state.audioCtx.state==="suspended") state.audioCtx.resume();
+  return state.audioCtx;
+}
+/* Two-tone "bing-bong" chime (like station PA) */
+function chime(){
+  if(state.muted) return;
+  const ctx=ensureAudio(); if(!ctx) return;
+  const now=ctx.currentTime;
+  const notes=[[987.77,0],[659.25,0.28]]; // B5 then E5
+  notes.forEach(([freq,t])=>{
+    const o=ctx.createOscillator(),g=ctx.createGain();
+    o.type="sine";o.frequency.value=freq;
+    o.connect(g);g.connect(ctx.destination);
+    const s=now+t;
+    g.gain.setValueAtTime(0,s);
+    g.gain.linearRampToValueAtTime(0.22,s+0.02);
+    g.gain.exponentialRampToValueAtTime(0.0008,s+0.55);
+    o.start(s);o.stop(s+0.6);
+  });
+}
+let gbVoice=null;
+function pickVoice(){
+  const vs=speechSynthesis.getVoices();
+  gbVoice=vs.find(v=>/en-GB/i.test(v.lang)&&/female|Hazel|Serena|Kate|Sonia|Libby/i.test(v.name))
+        ||vs.find(v=>/en-GB/i.test(v.lang))
+        ||vs.find(v=>/^en/i.test(v.lang))||null;
+}
+if("speechSynthesis" in window){
+  pickVoice();
+  speechSynthesis.onvoiceschanged=pickVoice;
+}
+function speak(text){
+  if(state.muted||!("speechSynthesis"in window))return;
+  try{
+    speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance(text);
+    u.lang="en-GB";u.rate=0.95;u.pitch=1;
+    if(gbVoice)u.voice=gbVoice;
+    speechSynthesis.speak(u);
+  }catch(e){}
+}
+function announce(station){
+  const name=station.name;
+  let text=`The next station is ${name}. `;
+  const others=station.lines.filter(l=>LINES[l]&&l!==state.currentLine).map(l=>LINES[l].textName);
+  if(station.interchange && others.length){
+    text+=`Change here for the ${listWords(others)} line${others.length>1?"s":""}. `;
+  }
+  text+="Please mind the gap between the train and the platform.";
+  // chime first, then speech shortly after
+  chime();
+  setTimeout(()=>speak(text), 850);
+}
+function listWords(arr){
+  if(arr.length<=1)return arr.join("");
+  return arr.slice(0,-1).join(", ")+" and "+arr[arr.length-1];
+}
+
+/* =========================================================================
+   BUILD THE SVG TUBE MAP
+   ========================================================================= */
+const MAP_W=1000, MAP_H=720;
+const svg=$("#tube-map");
+let MAPROOT=null;   // inner <g> that carries the pan/zoom transform (vector-crisp)
+
+/* ---- Line geometry: draw shared corridors as parallel offset lines ----
+   For every segment we know which lines run along it; each line is pushed
+   sideways by a consistent perpendicular offset so parallel routes read as
+   separate coloured lines (as on the real Tube map). Corners are mitre-joined. */
+const LINE_W=3.6, LINE_SPACING=4.4;
+let EDGE_MEMBERS={};
+function buildEdgeMembers(){
+  EDGE_MEMBERS={};
+  for(const key of Object.keys(LINES)){
+    const seq=LINE_SEQ[key]; if(!seq) continue;
+    for(let i=0;i<seq.length-1;i++){
+      const a=seq[i], b=seq[i+1];
+      const ek = a<b ? a+"|"+b : b+"|"+a;
+      (EDGE_MEMBERS[ek] = EDGE_MEMBERS[ek]||[]).push(key);
+    }
+  }
+}
+function _intersect(p,d1,q,d2){            // infinite-line intersection
+  const den = d1.x*d2.y - d1.y*d2.x;
+  if(Math.abs(den)<1e-6) return null;      // parallel
+  const t = ((q.x-p.x)*d2.y - (q.y-p.y)*d2.x)/den;
+  return {x:p.x+t*d1.x, y:p.y+t*d1.y};
+}
+function offsetPolyline(seq, lineKey, spacing){
+  const pts = seq.map(id=>S[id]).filter(Boolean);
+  if(pts.length<2) return "";
+  const segs=[];
+  for(let i=0;i<pts.length-1;i++){
+    const a=pts[i], b=pts[i+1];
+    const ek = a.id<b.id ? a.id+"|"+b.id : b.id+"|"+a.id;
+    const members = EDGE_MEMBERS[ek] || [lineKey];
+    const off = (members.indexOf(lineKey) - (members.length-1)/2) * spacing;
+    // travel direction
+    let tx=b.x-a.x, ty=b.y-a.y; const tl=Math.hypot(tx,ty)||1; tx/=tl; ty/=tl;
+    // perpendicular, normalised to one consistent global side (+x half-plane).
+    // All lines on an edge share this side, so parallel bundles stay on the
+    // same side across segments instead of flipping/twisting at stations.
+    let nx=-ty, ny=tx;
+    if(nx<-1e-9 || (Math.abs(nx)<1e-9 && ny<0)){ nx=-nx; ny=-ny; }
+    segs.push({
+      a:{x:a.x+nx*off, y:a.y+ny*off},
+      b:{x:b.x+nx*off, y:b.y+ny*off},
+      d:{x:tx,y:ty}
+    });
+  }
+  const P=[segs[0].a];
+  for(let i=0;i<segs.length;i++){
+    const s=segs[i];
+    if(i<segs.length-1){
+      const t=segs[i+1];
+      const j=_intersect(s.a,s.d,t.a,t.d);
+      if(j && Math.hypot(j.x-s.b.x,j.y-s.b.y)<70) P.push(j);  // clean mitre corner
+      else { P.push(s.b); P.push(t.a); }                      // parallel jog
+    }else P.push(s.b);
+  }
+  return P.map((p,i)=>(i?"L":"M")+p.x.toFixed(1)+" "+p.y.toFixed(1)).join(" ");
+}
+
+/* Simple London map backdrop: land tint, fare-zone rings and green spaces.
+   Purely decorative so the schematic lines don't float on an empty canvas.
+   Does not touch any station data or coordinates. */
+function buildDefs(){
+  const defs=el("defs");
+  // soft feathered fill for green spaces
+  const pg=el("radialGradient",{id:"parkGrad",cx:"50%",cy:"45%",r:"60%"});
+  pg.appendChild(el("stop",{offset:"0%","stop-color":"#c7e3bd","stop-opacity":"1"}));
+  pg.appendChild(el("stop",{offset:"65%","stop-color":"#cfe6c6","stop-opacity":".85"}));
+  pg.appendChild(el("stop",{offset:"100%","stop-color":"#cfe6c6","stop-opacity":"0"}));
+  defs.appendChild(pg);
+  // gentle depth on the river
+  const rg=el("linearGradient",{id:"riverGrad",x1:"0",y1:"0",x2:"0",y2:"1"});
+  rg.appendChild(el("stop",{offset:"0%","stop-color":"#aecfec"}));
+  rg.appendChild(el("stop",{offset:"100%","stop-color":"#8fb8df"}));
+  defs.appendChild(rg);
+  // clip map content to the (rounded) canvas so nothing spills onto the paper
+  const cp=el("clipPath",{id:"mapClip"});
+  cp.appendChild(el("rect",{x:0,y:0,width:MAP_W,height:MAP_H,rx:14,ry:14}));
+  defs.appendChild(cp);
+  svg.appendChild(defs);
+}
+
+/* Google-Maps-style simplified basemap: light land, a stylised white street
+   grid, flat green spaces and the Thames. Purely decorative so the schematic
+   lines sit on a city-like backdrop. Does not touch any station data. */
+function buildBackground(P){
+  P.appendChild(el("rect",{class:"map-land",x:0,y:0,width:MAP_W,height:MAP_H,rx:14,ry:14}));
+
+  // ---- stylised street network (gentle wiggle, GMaps feel) ----------
+  const rng=mulberry32(20240607);
+  const jx=()=>(rng()-0.5)*20;          // per-sample jitter
+  const step=55;
+  const gRoadCasing=el("g",{id:"gRoadCasing","aria-hidden":"true","clip-path":"url(#mapClip)"});
+  const gRoad=el("g",{id:"gRoad","aria-hidden":"true","clip-path":"url(#mapClip)"});
+
+  const cols=[]; for(let x=20;x<MAP_W-10;x+=40+rng()*48) cols.push(x);
+  const rows=[]; for(let y=20;y<MAP_H-10;y+=38+rng()*42) rows.push(y);
+
+  function roadPath(vertical,base){
+    let d="",first=true;
+    if(vertical){
+      for(let y=-10;y<=MAP_H+10;y+=step){d+=(first?"M":"L")+(base+jx()).toFixed(1)+" "+y+" ";first=false;}
+    }else{
+      for(let x=-10;x<=MAP_W+10;x+=step){d+=(first?"M":"L")+x+" "+(base+jx()).toFixed(1)+" ";first=false;}
+    }
+    return d.trim();
+  }
+  function addRoad(d,i){
+    const type = i%7===0?"motorway":(i%3===0?"arterial":"minor");
+    const cw = type==="motorway"?7:type==="arterial"?6:4.2;
+    const rw = type==="motorway"?5:type==="arterial"?4:2.4;
+    gRoadCasing.appendChild(el("path",{class:"road-casing "+type,d,"stroke-width":cw}));
+    gRoad.appendChild(el("path",{class:"road "+type,d,"stroke-width":rw}));
+  }
+  cols.forEach((x,i)=>addRoad(roadPath(true,x),i));
+  rows.forEach((y,i)=>addRoad(roadPath(false,y),i+3));
+  P.appendChild(gRoadCasing);
+  P.appendChild(gRoad);
+
+  // ---- flat green spaces (drawn over roads, like GMaps parks) --------
+  [{n:"Regent's Park",x:330,y:185,rx:58,ry:38},
+   {n:"Hyde Park",x:275,y:335,rx:76,ry:46},
+   {n:"Green Park",x:405,y:402,rx:28,ry:19},
+   {n:"Richmond Park",x:70,y:435,rx:58,ry:48},
+   {n:"Clapham Common",x:470,y:605,rx:48,ry:31},
+   {n:"Wimbledon Common",x:320,y:632,rx:54,ry:35},
+   {n:"Epping Forest",x:905,y:120,rx:64,ry:58},
+   {n:"Victoria Park",x:745,y:270,rx:42,ry:27}].forEach(p=>{
+    P.appendChild(el("ellipse",{class:"park",cx:p.x,cy:p.y,rx:p.rx,ry:p.ry}));
+    const t=el("text",{class:"park-label",x:p.x,y:p.y,"text-anchor":"middle"});
+    t.textContent=p.n;
+    P.appendChild(t);
+  });
+}
+
+function buildMap(){
+  svg.setAttribute("viewBox",`0 0 ${MAP_W} ${MAP_H}`);
+  svg.innerHTML="";
+
+  buildDefs();                               // gradients + clip-path live on <svg>
+  const root=el("g",{id:"mapRoot"});         // everything that pans/zooms lives here
+  svg.appendChild(root);
+  MAPROOT=root;
+
+  buildBackground(root);       // simple London map behind the schematic
+
+  // River Thames — a pale band weaving through the city
+  const river=el("path",{class:"river",fill:"url(#riverGrad)",
+    d:"M 20 430 C 120 430 140 400 200 405 C 320 415 360 460 470 465 "+
+      "C 560 469 600 430 660 395 C 720 362 760 378 830 410 C 900 440 960 470 1000 470 "+
+      "L 1000 500 C 960 500 900 470 830 440 C 760 410 720 395 660 425 "+
+      "C 600 460 560 499 470 495 C 360 490 320 445 200 435 C 140 430 120 460 20 460 Z"});
+  root.appendChild(river);
+  root.appendChild(el("text",{class:"river-label",x:"70",y:"452"})).textContent="River Thames";
+
+  // Line paths: a white casing group beneath, coloured lines on top.
+  // Shared corridors are split into parallel offset lines (real-map style).
+  buildEdgeMembers();
+  const gCasing=el("g",{id:"gCasing"});
+  const gLines=el("g",{id:"gLines"});
+  root.appendChild(gCasing);
+  root.appendChild(gLines);
+  for(const key in LINE_SEQ){
+    const d=offsetPolyline(LINE_SEQ[key], key, LINE_SPACING);
+    if(!d) continue;
+    gCasing.appendChild(el("path",{class:"line-casing",d,"data-line":key,"aria-hidden":"true"}));
+    gLines.appendChild(el("path",{class:"line-path",d,stroke:LINES[key].colour,
+      "stroke-width":LINE_W,"data-line":key,"aria-hidden":"true"}));
+  }
+  // Branch spurs (forks a single ordered array can't represent)
+  BRANCHES.forEach(br=>{
+    const a=S[br.from], b=S[br.to]; if(!a||!b) return;
+    const d=`M ${a.x} ${a.y} L ${b.x} ${b.y}`;
+    gCasing.appendChild(el("path",{class:"line-casing",d,"data-line":br.line,"aria-hidden":"true"}));
+    gLines.appendChild(el("path",{class:"line-path",d,stroke:LINES[br.line].colour,
+      "stroke-width":LINE_W,"data-line":br.line,"aria-hidden":"true"}));
+  });
+
+  // Station markers group
+  const gSt=el("g",{id:"gStations"});
+  root.appendChild(gSt);
+  for(const id in S){
+    const s=S[id];
+    const g=el("g",{class:"st-group","data-id":id,tabindex:"0",role:"button",
+      "aria-label":`${s.name}, zone ${zoneLabel(s.zone)}. ${linesOf(id).map(l=>LINES[l].name).join(", ")} line${linesOf(id).length>1?"s":""}. Press enter to travel here.`});
+    if(s.interchange){
+      g.appendChild(el("circle",{class:"interchange",cx:s.x,cy:s.y,r:6}));
+    }else{
+      // tick mark in the colour of its (first) line
+      const line=linesOf(id)[0];
+      g.appendChild(el("circle",{class:"normal-dot",cx:s.x,cy:s.y,r:3.4,
+        style:`stroke:${LINES[line].colour}`}));
+    }
+    // larger invisible hit area
+    g.appendChild(el("circle",{class:"station-hit",cx:s.x,cy:s.y,r:13}));
+    // label
+    const lbl=el("text",{class:"st-label",x:s.x+9,y:s.y-6});
+    lbl.textContent=s.name.length>22?s.name.slice(0,20)+"…":s.name;
+    g.appendChild(lbl);
+    gSt.appendChild(g);
+
+    // events
+    g.addEventListener("click",()=>startJourney(id));
+    g.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();startJourney(id);}});
+    g.addEventListener("mouseenter",e=>showTooltip(id,e));
+    g.addEventListener("mousemove",moveTooltip);
+    g.addEventListener("mouseleave",hideTooltip);
+    g.addEventListener("focus",e=>showTooltip(id,null,g));
+    g.addEventListener("blur",hideTooltip);
+  }
+
+  // Frame drawn around the map canvas edge — pans & scales WITH the map
+  root.appendChild(el("rect",{class:"map-border",x:3,y:3,width:MAP_W-6,height:MAP_H-6,rx:14,ry:14}));
+  root.appendChild(el("rect",{class:"map-border-inner",x:9,y:9,width:MAP_W-18,height:MAP_H-18,rx:10,ry:10}));
+}
+
+/* =========================================================================
+   TOOLTIP
+   ========================================================================= */
+const tooltip=$("#tooltip");
+function tooltipHTML(id){
+  const s=S[id];
+  const badges=linesOf(id).map(l=>{
+    const L=LINES[l];
+    return `<span class="line-badge ${L.light?"light":""}" style="background:${L.colour}">${lineName(l)}</span>`;
+  }).join("");
+  return `<div class="tt-name">${s.name}</div>
+          <div class="tt-lines">${badges}</div>
+          <div class="tt-zone">${zoneText(s.zone)}${s.interchange?" · "+T("interchangeWord"):""}</div>`;
+}
+function showTooltip(id,evt,g){
+  tooltip.innerHTML=tooltipHTML(id);
+  tooltip.classList.add("show");
+  if(evt){moveTooltip(evt);}
+  else if(g){
+    const r=g.getBoundingClientRect(), stage=$("#mapStage").getBoundingClientRect();
+    placeTooltip(r.left-stage.left+r.width/2, r.top-stage.top);
+  }
+}
+function moveTooltip(evt){
+  const stage=$("#mapStage").getBoundingClientRect();
+  placeTooltip(evt.clientX-stage.left, evt.clientY-stage.top);
+}
+function placeTooltip(x,y){
+  const stage=$("#mapStage");
+  const tw=tooltip.offsetWidth, th=tooltip.offsetHeight;
+  let nx=x+14, ny=y+14;
+  if(nx+tw>stage.clientWidth) nx=x-tw-14;
+  if(ny+th>stage.clientHeight) ny=y-th-14;
+  tooltip.style.left=Math.max(4,nx)+"px";
+  tooltip.style.top=Math.max(4,ny)+"px";
+}
+function hideTooltip(){tooltip.classList.remove("show");}
+
+/* =========================================================================
+   LINE FILTER CHIPS
+   ========================================================================= */
+function buildChips(){
+  const wrap=$("#chips");
+  wrap.innerHTML="";
+  const all=document.createElement("button");
+  all.className="chip reset";all.textContent=T("allLines");
+  all.setAttribute("aria-pressed","true");
+  all.onclick=()=>setLineFilter(null);
+  wrap.appendChild(all);
+  for(const key in LINES){
+    const L=LINES[key];
+    const c=document.createElement("button");
+    c.className="chip"+(L.light?" light":"");
+    c.style.background=L.colour;
+    if(L.light)c.style.color="#111";
+    c.textContent=lineName(key);
+    c.setAttribute("aria-pressed","false");
+    c.dataset.line=key;
+    c.onclick=()=>setLineFilter(state.activeLineFilter===key?null:key);
+    wrap.appendChild(c);
+  }
+}
+function setLineFilter(key){
+  state.activeLineFilter=key;
+  $$("#chips .chip").forEach(c=>{
+    const on = (key===null && c.classList.contains("reset")) || c.dataset.line===key;
+    c.setAttribute("aria-pressed",on?"true":"false");
+  });
+  // dim line paths + their casings
+  $$("#gLines .line-path").forEach(p=>{
+    p.classList.toggle("line-dim", key!==null && p.dataset.line!==key);
+    p.setAttribute("stroke-width", key!==null && p.dataset.line===key?4.8:LINE_W);
+  });
+  $$("#gCasing .line-casing").forEach(p=>{
+    p.classList.toggle("line-dim", key!==null && p.dataset.line!==key);
+    p.setAttribute("stroke-width", key!==null && p.dataset.line===key?6.8:5.6);
+  });
+  // dim stations not on the line
+  $$(".st-group").forEach(g=>{
+    const id=g.dataset.id;
+    const on = key===null || S[id].lines.includes(key);
+    g.classList.toggle("dim-station", !on);
+  });
+}
+
+/* =========================================================================
+   MAP PAN & ZOOM  (GPU transform on the <svg>)
+   ========================================================================= */
+/* Invisible walls: keep the map from being dragged out of the window.
+   A small overscroll pad is allowed so it never feels hard-locked. */
+function clampPan(){
+  const vp=$("#mapViewport"); if(!vp) return;
+  const vw=vp.clientWidth, vh=vp.clientHeight;
+  if(!vw||!vh) return;
+  const sw=MAP_W*state.view.scale, sh=MAP_H*state.view.scale, pad=50;
+  const clamp=(val,size,view)=> size<=view
+    ? Math.min(view-size+pad, Math.max(-pad, val))      // smaller than window
+    : Math.min(pad, Math.max(view-size-pad, val));      // larger than window
+  state.view.x=clamp(state.view.x,sw,vw);
+  state.view.y=clamp(state.view.y,sh,vh);
+}
+function applyView(){
+  clampPan();
+  const{x,y,scale}=state.view;
+  // Transform the inner SVG group via its transform attribute so the browser
+  // re-renders the vector at each zoom level (crisp) instead of scaling a
+  // cached raster (blurry). Keeps lines and text sharp at any magnification.
+  if(MAPROOT) MAPROOT.setAttribute("transform",`translate(${x} ${y}) scale(${scale})`);
+  // hide labels when zoomed far out for clarity
+  const hide=scale<0.85;
+  $$(".st-label").forEach(l=>l.classList.toggle("hide",hide));
+}
+function clampView(){
+  state.view.scale=Math.min(4,Math.max(0.5,state.view.scale));
+}
+function zoomAt(cx,cy,factor){
+  const v=state.view;
+  const oldScale=v.scale;
+  let newScale=v.scale*factor;
+  newScale=Math.min(4,Math.max(0.5,newScale));
+  const realFactor=newScale/oldScale;            // honour the clamp
+  v.x=cx-(cx-v.x)*realFactor;
+  v.y=cy-(cy-v.y)*realFactor;
+  v.scale=newScale;
+  applyView();
+}
+function fitMap(){
+  const stage=$("#mapViewport");
+  const sw=stage.clientWidth, sh=stage.clientHeight;
+  if(!sw||!sh) return;
+  // Make the SVG user-space 1:1 with pixels so the #mapRoot transform (computed
+  // in pixels) isn't re-scaled by viewBox aspect-fit — this is what centres it.
+  svg.setAttribute("viewBox",`0 0 ${sw} ${sh}`);
+  const scale=Math.min(sw/MAP_W, sh/MAP_H)*0.8;
+  state.view.scale=scale;
+  state.view.x=(sw-MAP_W*scale)/2;
+  state.view.y=(sh-MAP_H*scale)/2;
+  applyView();
+}
+function initMapInteraction(){
+  const stage=$("#mapViewport");
+  let dragging=false,moved=false,sx=0,sy=0,ox=0,oy=0;
+  stage.addEventListener("wheel",e=>{
+    e.preventDefault();
+    const r=stage.getBoundingClientRect();
+    const factor=e.deltaY<0?1.12:1/1.12;
+    zoomAt(e.clientX-r.left, e.clientY-r.top, factor);
+  },{passive:false});
+
+  stage.addEventListener("pointerdown",e=>{
+    // let stations and the zoom buttons handle their own clicks (don't pan)
+    if(e.target.closest(".st-group, .zoom-ctrls, button"))return;
+    dragging=true;moved=false;sx=e.clientX;sy=e.clientY;
+    ox=state.view.x;oy=state.view.y;stage.setPointerCapture(e.pointerId);
+    stage.style.cursor="grabbing";
+  });
+  stage.addEventListener("pointermove",e=>{
+    if(!dragging)return;
+    const dx=e.clientX-sx,dy=e.clientY-sy;
+    if(Math.abs(dx)+Math.abs(dy)>3)moved=true;
+    state.view.x=ox+dx;state.view.y=oy+dy;applyView();
+  });
+  const up=e=>{dragging=false;stage.style.cursor="grab";};
+  stage.addEventListener("pointerup",up);
+  stage.addEventListener("pointercancel",up);
+  stage.style.cursor="grab";
+
+  // pinch zoom (two pointers)
+  const pts=new Map();let pinchDist=0;
+  stage.addEventListener("pointerdown",e=>pts.set(e.pointerId,e));
+  stage.addEventListener("pointermove",e=>{
+    if(!pts.has(e.pointerId))return;
+    pts.set(e.pointerId,e);
+    if(pts.size===2){
+      const[a,b]=[...pts.values()];
+      const d=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
+      if(pinchDist){
+        const r=stage.getBoundingClientRect();
+        const mx=(a.clientX+b.clientX)/2-r.left, my=(a.clientY+b.clientY)/2-r.top;
+        zoomAt(mx,my,d/pinchDist);
+      }
+      pinchDist=d;dragging=false;
+    }
+  });
+  const clearPt=e=>{pts.delete(e.pointerId);if(pts.size<2)pinchDist=0;};
+  stage.addEventListener("pointerup",clearPt);
+  stage.addEventListener("pointercancel",clearPt);
+
+  $("#zoomIn").onclick=()=>{const s=$("#mapViewport");zoomAt(s.clientWidth/2,s.clientHeight/2,1.25);};
+  $("#zoomOut").onclick=()=>{const s=$("#mapViewport");zoomAt(s.clientWidth/2,s.clientHeight/2,1/1.25);};
+  $("#zoomReset").onclick=fitMap;
+}
+
+/* =========================================================================
+   SEARCH + AUTOCOMPLETE
+   ========================================================================= */
+const searchInput=$("#search"), acBox=$("#autocomplete");
+let acIndex=-1, acItems=[];
+function runSearch(q){
+  q=q.trim().toLowerCase();
+  acBox.innerHTML="";acIndex=-1;acItems=[];
+  if(!q){acBox.classList.remove("show");searchInput.setAttribute("aria-expanded","false");return;}
+  const matches=Object.values(S).filter(s=>s.name.toLowerCase().includes(q)).slice(0,8);
+  if(!matches.length){acBox.classList.remove("show");searchInput.setAttribute("aria-expanded","false");return;}
+  matches.forEach(s=>{
+    const line=linesOf(s.id)[0];
+    const item=document.createElement("div");
+    item.className="ac-item";item.setAttribute("role","option");
+    item.innerHTML=`<span class="ac-dot" style="background:${LINES[line].colour}"></span>
+      <span>${s.name}</span><span style="color:var(--grey-3);margin-left:auto;font-size:.78rem">${zoneText(s.zone)}</span>`;
+    item.onclick=()=>{selectSearch(s.id);};
+    acBox.appendChild(item);
+    acItems.push({id:s.id,el:item});
+  });
+  acBox.classList.add("show");
+  searchInput.setAttribute("aria-expanded","true");
+}
+function selectSearch(id){
+  acBox.classList.remove("show");searchInput.value=S[id].name;
+  // centre map on station then ride
+  centreOn(id);
+  setTimeout(()=>startJourney(id),200);
+}
+function centreOn(id){
+  const s=S[id];const stage=$("#mapViewport");
+  state.view.scale=Math.max(state.view.scale,1.2);clampView();
+  state.view.x=stage.clientWidth/2 - s.x*state.view.scale;
+  state.view.y=stage.clientHeight/2 - s.y*state.view.scale;
+  applyView();
+}
+searchInput.addEventListener("input",e=>runSearch(e.target.value));
+searchInput.addEventListener("keydown",e=>{
+  if(!acItems.length)return;
+  if(e.key==="ArrowDown"){e.preventDefault();acIndex=(acIndex+1)%acItems.length;highlightAc();}
+  else if(e.key==="ArrowUp"){e.preventDefault();acIndex=(acIndex-1+acItems.length)%acItems.length;highlightAc();}
+  else if(e.key==="Enter"){e.preventDefault();if(acIndex>=0)selectSearch(acItems[acIndex].id);else if(acItems[0])selectSearch(acItems[0].id);}
+  else if(e.key==="Escape"){acBox.classList.remove("show");}
+});
+function highlightAc(){
+  acItems.forEach((it,i)=>it.el.classList.toggle("active",i===acIndex));
+  if(acItems[acIndex])acItems[acIndex].el.scrollIntoView({block:"nearest"});
+}
+document.addEventListener("click",e=>{if(!e.target.closest(".search-wrap"))acBox.classList.remove("show");});
+
+/* =========================================================================
+   JOURNEY ANIMATION (screen C)
+   ========================================================================= */
+function pickLineFor(id){
+  // prefer the currently filtered line if the station is on it
+  if(state.activeLineFilter && S[id].lines.includes(state.activeLineFilter))
+    return state.activeLineFilter;
+  return linesOf(id)[0];
+}
+function startJourney(id){
+  ensureAudio(); // unlock audio on user gesture
+  const line=pickLineFor(id);
+  state.currentStation=id;
+  state.currentLine=line;
+  hideTooltip();
+  const begin=()=>{show("journey");setupJourneyView(id,line);};
+  // When leaving the map, dive the map into the chosen station before cutting
+  // to the ride — otherwise (keyboard reduced-motion, or arriving from detail)
+  // go straight there.
+  if($("#map-screen").classList.contains("active") && !reduceMotion)
+    zoomIntoStation(id,begin);
+  else begin();
+}
+
+/* Animate the map transform to zoom/pan toward a station, fading the stage,
+   then hand off to the journey. Purely visual — leaves state.view zoomed in,
+   which enterMap() resets via fitMap(). */
+function zoomIntoStation(id,done){
+  const s=S[id], vp=$("#mapViewport");
+  const vw=vp.clientWidth||MAP_W, vh=vp.clientHeight||MAP_H;
+  const sv={x:state.view.x,y:state.view.y,scale:state.view.scale};
+  const tScale=Math.min(4,Math.max(sv.scale*1.9,2.6));
+  const tx=vw/2 - s.x*tScale, ty=vh/2 - s.y*tScale;
+  const dur=540;let t0=null;
+  const ease=t=>1-Math.pow(1-t,3);          // easeOutCubic
+  $("#mapStage").classList.add("diving");
+  function frame(ts){
+    if(t0===null)t0=ts;
+    const p=Math.min(1,(ts-t0)/dur), e=ease(p);
+    state.view.scale=sv.scale+(tScale-sv.scale)*e;
+    state.view.x=sv.x+(tx-sv.x)*e;
+    state.view.y=sv.y+(ty-sv.y)*e;
+    applyView();
+    if(p<1)requestAnimationFrame(frame);else done();
+  }
+  requestAnimationFrame(frame);
+}
+
+function setupJourneyView(id,line){
+  const L=LINES[line], s=S[id];
+  // ----- theme the journey screen in the line colour -----
+  $("#journey").style.setProperty("--jline", L.colour);
+  const badge=$("#journeyLineName");
+  badge.textContent=lineName(line);
+  badge.classList.toggle("on-light", !!L.light);
+  $("#journeyStationName").textContent=s.name;
+
+  // ----- carriage: start rocking, doors shut -----
+  const car=$(".carriage");
+  car.classList.remove("arrived");
+  car.classList.add("riding");
+
+  // ----- split-flap departure board flips to the station name -----
+  flapBoardTo($("#flapBoard"), s.name);
+
+  const status=$("#journeyStatus");
+  status.textContent=T("departing");
+  status.classList.remove("arriving");
+  $("#journeyCta").classList.remove("show");
+
+  // ----- progress bar fills over the ride -----
+  const RIDE=3.2;
+  const pf=$("#journeyProgressFill");
+  pf.style.transition="none"; pf.style.width="0%";
+  void pf.offsetWidth;
+  pf.style.transition=`width ${reduceMotion?0:RIDE}s cubic-bezier(.4,0,.2,1)`;
+  pf.style.width="100%";
+
+  // ----- mini line view with gliding train -----
+  const lv=$("#lineViewSvg");
+  lv.innerHTML="";
+  const seq=LINE_SEQ[line];
+  const idx=seq.indexOf(id);
+  // show a window of up to 5 stations ending at target
+  let windowIds;
+  if(idx<0 && STUBS[id]) windowIds=[STUBS[id].inward, id];   // branch stub terminus
+  else { const start=Math.max(0, idx-4); windowIds=seq.slice(start, idx+1); }
+
+  const padX=40, w=600, y=70;
+  const nStops=Math.max(windowIds.length,2);
+  const step=(w-padX*2)/(nStops-1);
+  // line
+  lv.appendChild(el("path",{d:`M ${padX} ${y} L ${w-padX} ${y}`,stroke:L.colour,
+    "stroke-width":8,"stroke-linecap":"round",fill:"none"}));
+  // station dots + labels
+  windowIds.forEach((sid,i)=>{
+    const cx=padX+step*i;
+    const isTarget=sid===id;
+    lv.appendChild(el("circle",{cx,cy:y,r:isTarget?9:6,fill:isTarget?"#fff":"#1c222e",
+      stroke:isTarget?L.colour:"#fff","stroke-width":isTarget?4:2}));
+    const t=el("text",{x:cx,y:y+(i%2?30:-18),"text-anchor":"middle",
+      fill:isTarget?"#fff":"#aab0b8","font-size":"11","font-family":"Hammersmith One"});
+    t.textContent=S[sid].name.length>16?S[sid].name.slice(0,15)+"…":S[sid].name;
+    lv.appendChild(t);
+  });
+  // train (a little roundel-ish dot)
+  const train=el("g",{class:"train-dot",id:"trainDot"});
+  train.appendChild(el("circle",{cx:0,cy:0,r:11,fill:"#fff"}));
+  train.appendChild(el("circle",{cx:0,cy:0,r:11,fill:"none",stroke:L.colour,"stroke-width":4}));
+  train.appendChild(el("rect",{x:-7,y:-3,width:14,height:6,fill:L.colour}));
+  lv.appendChild(train);
+
+  const fromX=padX, toX=padX+step*(windowIds.length-1);
+  animateTrain(train,fromX,toX,y,()=>{
+    status.textContent=T("arriving").replace("{name}",s.name);
+    status.classList.add("arriving");
+    // stop the rocking and slide the doors open at the platform
+    car.classList.remove("riding");
+    car.classList.add("arrived");
+    $("#journeyCta").classList.add("show");
+    announce(s);
+  });
+  // kick off fetch early
+  prefetchStation(s);
+}
+
+function animateTrain(node,x0,x1,y,done){
+  if(reduceMotion){node.setAttribute("transform",`translate(${x1},${y})`);done();return;}
+  const dur=3200;let t0=null;
+  const ease=t=>t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2; // easeInOut
+  function frame(ts){
+    if(t0===null)t0=ts;
+    const p=Math.min(1,(ts-t0)/dur);
+    const x=x0+(x1-x0)*ease(p);
+    node.setAttribute("transform",`translate(${x},${y})`);
+    if(p<1)requestAnimationFrame(frame);else done();
+  }
+  requestAnimationFrame(frame);
+}
+
+/* Split-flap departure board: each cell flaps up through the character set to
+   its target letter, later cells starting later so the name ripples across. */
+const FLAP_CHARS=" ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.&'-";
+function flapBoardTo(board,text){
+  text=text.toUpperCase();
+  board.innerHTML="";
+  const cells=[...text].map(()=>{
+    const c=document.createElement("span");
+    c.className="flap-cell";c.innerHTML="&nbsp;";
+    board.appendChild(c);return c;
+  });
+  const put=(cell,ch)=>cell.innerHTML = ch===" " ? "&nbsp;" : ch;
+  if(reduceMotion){cells.forEach((c,i)=>put(c,text[i]));return;}
+  cells.forEach((cell,i)=>{
+    const ch=text[i];
+    const end=Math.max(0,FLAP_CHARS.indexOf(ch));
+    let cur=0;
+    function step(){
+      put(cell,FLAP_CHARS[cur]);
+      cell.classList.remove("flip");void cell.offsetWidth;cell.classList.add("flip");
+      if(cur>=end){put(cell,ch);return;}
+      cur++;setTimeout(step,38);
+    }
+    setTimeout(step,i*55);   // ripple across the board
+  });
+}
+
+/* =========================================================================
+   WIKIPEDIA FETCH + STATION DETAIL (screen D)
+   ========================================================================= */
+function wikiTitle(s){
+  // Most tube stations use "<Name> tube station"; Elizabeth-line-only use "<Name> station"
+  const onlyElizabeth = s.lines.every(l=>l==="elizabeth"||l==="dlr");
+  const clean=s.name.replace(/\s*\(.*?\)\s*/g,"").replace(/&/g,"and")
+                    .replace(/'/g,"%27").trim().replace(/\s+/g,"_");
+  return onlyElizabeth ? `${clean}_station` : `${clean}_tube_station`;
+}
+async function fetchWiki(s){
+  const key=s.id;
+  if(apiCache.has(key))return apiCache.get(key);
+  const title=wikiTitle(s);
+  const url=`https://en.wikipedia.org/api/rest_v1/page/summary/${title}`;
+  try{
+    const res=await fetch(url,{headers:{"Accept":"application/json"}});
+    if(!res.ok)throw new Error("not ok");
+    const data=await res.json();
+    apiCache.set(key,data);
+    return data;
+  }catch(e){
+    apiCache.set(key,null);
+    return null;
+  }
+}
+function prefetchStation(s){fetchWiki(s);} // warm the cache
+
+/* Longer intro text from the action API (several paragraphs), cached. */
+async function fetchWikiExtract(s){
+  const key="ext:"+s.id;
+  if(apiCache.has(key))return apiCache.get(key);
+  const title=wikiTitle(s);
+  const url="https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=1&explaintext=1"+
+            "&redirects=1&format=json&origin=*&titles="+encodeURIComponent(title);
+  try{
+    const res=await fetch(url); if(!res.ok)throw 0;
+    const data=await res.json();
+    const page=Object.values(data?.query?.pages||{})[0];
+    const ext=page&&page.extract?page.extract:null;
+    apiCache.set(key,ext); return ext;
+  }catch(e){ apiCache.set(key,null); return null; }
+}
+
+/* Approximate years the station has been open, in the current language. */
+function serviceYears(opened){
+  const y=parseInt(opened,10); if(!y)return "—";
+  const age=new Date().getFullYear()-y; if(age<0)return "—";
+  return `${age} ${T("yearsUnit")}`;
+}
+
+/* Build the "Lines & connections" rows: for every line this station is on,
+   show its two termini and the adjacent stations (clickable to ride there). */
+function renderConnections(id){
+  const host=$("#interchanges");
+  host.innerHTML="";
+  linesOf(id).forEach(l=>{
+    const L=LINES[l], seq=LINE_SEQ[l];
+    let idx=seq?seq.indexOf(id):-1, prevId=null, nextId=null;
+    if(idx>=0){ prevId=idx>0?seq[idx-1]:null; nextId=idx<seq.length-1?seq[idx+1]:null; }
+    else if(STUBS[id] && STUBS[id].line===l){ nextId=STUBS[id].inward; }   // branch terminus
+    const termA=seq?S[seq[0]]:null, termB=seq?S[seq[seq.length-1]]:null;
+
+    const row=document.createElement("div"); row.className="conn-row";
+    const head=document.createElement("div"); head.className="conn-head";
+    head.innerHTML=`<span class="line-badge ${L.light?"light":""}" style="background:${L.colour}">${lineName(l)}</span>`;
+    row.appendChild(head);
+    if(termA && termB){
+      const ends=document.createElement("div"); ends.className="conn-ends";
+      ends.textContent=`${termA.name} ↔ ${termB.name}`;
+      row.appendChild(ends);
+    }
+    const nb=document.createElement("div"); nb.className="conn-neighbours";
+    [[prevId,"←"],[nextId,"→"]].forEach(([nid,arrow])=>{
+      if(!nid)return;
+      const b=document.createElement("button"); b.className="conn-pill";
+      b.textContent = arrow==="←" ? `← ${S[nid].name}` : `${S[nid].name} →`;
+      b.onclick=()=>{ state.currentStation=nid; state.currentLine=l; rideTo(nid,l); };
+      nb.appendChild(b);
+    });
+    if(nb.children.length) row.appendChild(nb);
+    host.appendChild(row);
+  });
+}
+
+function roundelSVG(colourStroke="#DC241F"){
+  return `<svg viewBox="0 0 200 160" width="120" height="96" aria-hidden="true">
+    <circle cx="100" cy="80" r="52" fill="none" stroke="${colourStroke}" stroke-width="20"/>
+    <rect x="28" y="66" width="144" height="28" fill="#0019A8"/></svg>`;
+}
+
+async function openDetail(id){
+  const s=S[id];
+  show("detail");
+  $("#detail").scrollTop=0;
+  // name board
+  $("#nbName").textContent=s.name;
+  // line badges
+  $("#detailLines").innerHTML=linesOf(id).map(l=>{
+    const L=LINES[l];
+    return `<span class="line-badge ${L.light?"light":""}" style="background:${L.colour};font-size:.8rem;padding:.35em .8em">${lineName(l)}</span>`;
+  }).join("");
+  // facts
+  $("#factGrid").innerHTML=`
+    <div class="fact"><div class="k">${T("fareZone")}</div><div class="v">${zoneLabel(s.zone)}</div></div>
+    <div class="fact"><div class="k">${T("opened")}</div><div class="v">${s.opened}</div></div>
+    <div class="fact"><div class="k">${T("inService")}</div><div class="v">${serviceYears(s.opened)}</div></div>
+    <div class="fact"><div class="k">${T("linesLabel")}</div><div class="v">${linesOf(id).length}</div></div>
+    <div class="fact"><div class="k">${T("interchangeLabel")}</div><div class="v">${s.interchange?T("yes"):T("no")}</div></div>`;
+  // lines & connections (termini + adjacent stations)
+  renderConnections(id);
+  // landmarks
+  $("#landmarks").innerHTML=(s.landmarks||[]).map(n=>`<span class="pill">${n}</span>`).join("")||"<span class='pill'>—</span>";
+  // step free
+  $("#stepfreeWrap").innerHTML = s.stepFree
+    ? `<span class="stepfree"><span class="badge">♿</span> ${T("stepFreeYes")}</span>`
+    : `<span class="stepfree no"><span class="badge">✕</span> ${T("stepFreeNo")}</span>`;
+
+  // hero + extract
+  const hero=$("#hero");
+  // reset hero
+  $$(".detail-img,.hero-fallback",hero).forEach(n=>n.remove());
+  const skel=$("#heroSkeleton");skel.style.display="block";
+
+  const data=await fetchWiki(s);
+  const longExtractP=fetchWikiExtract(s);   // longer intro, fetched in parallel
+  // guard: user may have navigated away
+  if(state.currentStation!==id) {/* still populate, harmless */}
+  // short description under the name board
+  $("#stationDesc").textContent = data&&data.description ? data.description : "";
+
+  const imgUrl=data?.originalimage?.source || data?.thumbnail?.source || null;
+  if(imgUrl){
+    const img=new Image();
+    img.className="detail-img";img.alt=s.name+" station";
+    img.decoding="async";img.loading="lazy";
+    img.onload=()=>{img.classList.add("loaded");skel.style.display="none";};
+    img.onerror=()=>showHeroFallback(hero,skel,s);
+    hero.appendChild(img);
+    img.src=imgUrl;
+    // style via class added in CSS (.detail-hero img)
+    img.style.position="absolute";img.style.inset="0";
+  }else{
+    showHeroFallback(hero,skel,s);
+  }
+
+  // extract text
+  const localBits=[];
+  if(s.opened)localBits.push(`It opened in ${s.opened}`);
+  localBits.push(`and lies in fare zone ${zoneLabel(s.zone)}`);
+  const localSentence=`${s.name} is a London Underground station served by the ${listWords(linesOf(id).map(l=>LINES[l].name))} line${linesOf(id).length>1?"s":""}. ${localBits.join(" ")}.`;
+  const longExtract=await longExtractP;
+  let extract = longExtract || data?.extract || localSentence;
+  if(extract.length>1300) extract = extract.slice(0,1300).replace(/\s+\S*$/,"")+"…";
+  $("#extract").textContent = extract;
+
+  // external links
+  const link=$("#wikiLink");
+  link.href = data?.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${wikiTitle(s)}`;
+  const mapLink=$("#mapLink");
+  const co=data?.coordinates;
+  if(co && co.lat!=null && co.lon!=null){
+    mapLink.href=`https://www.google.com/maps?q=${co.lat},${co.lon}`;
+    mapLink.style.display="";
+  }else mapLink.style.display="none";
+
+  // nav buttons bound to current line
+  bindDetailNav(id);
+}
+function showHeroFallback(hero,skel,s){
+  skel.style.display="none";
+  const fb=document.createElement("div");
+  fb.className="hero-fallback";
+  fb.innerHTML=roundelSVG();
+  hero.appendChild(fb);
+}
+
+/* Add credit element once */
+(function(){
+  const credit=document.createElement("div");
+  credit.className="hero-credit";credit.id="heroCredit";
+  credit.textContent="Image: Wikimedia Commons";
+  $("#hero").appendChild(credit);
+})();
+
+function bindDetailNav(id){
+  let line=state.currentLine && S[id].lines.includes(state.currentLine)
+    ? state.currentLine : linesOf(id)[0];
+  let seq=LINE_SEQ[line];
+  let idx=seq.indexOf(id), prevId, nextId;
+  if(idx<0 && STUBS[id]){                 // branch terminus drawn as a stub
+    line=STUBS[id].line; seq=LINE_SEQ[line];
+    prevId=null; nextId=STUBS[id].inward;
+  }else{
+    prevId=idx>0?seq[idx-1]:null;
+    nextId=idx<seq.length-1?seq[idx+1]:null;
+  }
+  state.currentLine=line;
+  const prevBtn=$("#prevStation"), nextBtn=$("#nextStation");
+  prevBtn.disabled=!prevId; nextBtn.disabled=!nextId;
+  prevBtn.style.opacity=prevId?1:.4; nextBtn.style.opacity=nextId?1:.4;
+  prevBtn.textContent = prevId?`← ${S[prevId].name}`:T("prevStart");
+  nextBtn.textContent = nextId?`${S[nextId].name} →`:T("nextEnd");
+  prevBtn.onclick=()=>{if(prevId){state.currentStation=prevId;state.currentLine=line;rideTo(prevId,line);}};
+  nextBtn.onclick=()=>{if(nextId){state.currentStation=nextId;state.currentLine=line;rideTo(nextId,line);}};
+}
+function rideTo(id,line){
+  state.currentStation=id;state.currentLine=line;
+  show("journey");setupJourneyView(id,line);
+}
+
+/* =========================================================================
+   WIRING / NAV BUTTONS
+   ========================================================================= */
+/* Show the map screen and always re-centre the map. Two rAFs ensure the
+   viewport has been laid out before we measure it, so centring is exact. */
+function enterMap(){
+  $("#mapStage").classList.remove("diving");   // undo the dive-in fade
+  show("map-screen");
+  requestAnimationFrame(()=>requestAnimationFrame(fitMap));
+}
+$("#startBtn").onclick=()=>{ensureAudio();enterMap();
+  // auto-hide hint
+  setTimeout(()=>{$("#mapHint").style.opacity="0";},4000);
+};
+$("#arriveBtn").onclick=()=>openDetail(state.currentStation);
+$("#backBtn").onclick=()=>{enterMap();};
+$("#backToMap").onclick=()=>{enterMap();};
+
+/* Mute toggle */
+const muteBtn=$("#mute");
+const ICON_ON=`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 10v4h4l5 5V5L7 10H3zm13.5 2a4.5 4.5 0 00-2.5-4v8a4.5 4.5 0 002.5-4zM14 3.2v2.1c2.9.9 5 3.5 5 6.7s-2.1 5.8-5 6.7v2.1c4-.9 7-4.5 7-8.8s-3-7.9-7-8.8z"/></svg>`;
+const ICON_OFF=`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 10v4h4l5 5V5L7 10H3z"/><path d="M16 8l5 5m0-5l-5 5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>`;
+function renderMute(){
+  muteBtn.innerHTML=state.muted?ICON_OFF:ICON_ON;
+  muteBtn.setAttribute("aria-pressed",state.muted?"true":"false");
+  muteBtn.setAttribute("aria-label",state.muted?"Unmute sound":"Mute sound");
+}
+muteBtn.onclick=()=>{
+  state.muted=!state.muted;
+  if(state.muted && "speechSynthesis" in window)speechSynthesis.cancel();
+  renderMute();
+};
+
+/* Language toggle */
+$("#lang").onclick=()=>setLang(state.lang==="en"?"zh":"en");
+
+/* Global keyboard: Escape returns to map from journey/detail */
+document.addEventListener("keydown",e=>{
+  if(e.key==="Escape"){
+    const active=$(".screen.active");
+    if(active&&(active.id==="journey"||active.id==="detail"))show("map-screen");
+  }
+});
+
+/* Keep map fitted on resize */
+let resizeT;
+window.addEventListener("resize",()=>{
+  clearTimeout(resizeT);
+  resizeT=setTimeout(()=>{if($("#map-screen").classList.contains("active"))fitMap();},150);
+});
+
+/* =========================================================================
+   INIT
+   ========================================================================= */
+/* Two large, tilted roundel logos as background branding on the paper. */
+function buildPaperDecor(){
+  const host=$("#paperDecor"); if(!host) return;
+  const marks=[
+    {left:"5%",  top:"10%", rot:-18},
+    {left:"95%", top:"22%", rot:15},
+    {left:"35%", top:"94%", rot:-12},
+  ];
+  host.innerHTML = marks.map(m=>
+    `<svg class="paper-roundel" viewBox="0 0 200 160" aria-hidden="true"
+       style="left:${m.left};top:${m.top};width:clamp(340px,62vmin,900px);height:auto;
+              transform:translate(-50%,-50%) rotate(${m.rot}deg)">
+       <circle cx="100" cy="80" r="52" fill="none" stroke="#DC241F" stroke-width="20"/>
+       <rect x="28" y="66" width="144" height="28" fill="#0019A8"/></svg>`).join("");
+}
+
+function init(){
+  applyStaticLang();
+  buildMap();
+  buildChips();
+  buildPaperDecor();
+  initMapInteraction();
+  renderMute();
+}
+init();
+</script>
+</body>
+</html>
