@@ -74,6 +74,7 @@ a{color:var(--blue)}
 
 @media (prefers-reduced-motion:reduce){
   .screen{transition:opacity .2s linear;transform:none!important}
+  .reveal{animation:none}
 }
 
 /* ---- Generic TfL sign button ---------------------------------------- */
@@ -241,6 +242,22 @@ a{color:var(--blue)}
   font-size:1.4rem;box-shadow:var(--shadow);line-height:1;
 }
 .zoom-ctrls button:active{transform:scale(.94)}
+
+/* Touch station preview card (bottom sheet) */
+.preview-backdrop{position:fixed;inset:0;z-index:150;background:rgba(0,0,0,.35);
+  opacity:0;visibility:hidden;transition:opacity .25s,visibility .25s}
+.preview-backdrop.show{opacity:1;visibility:visible}
+.preview-card{position:fixed;left:50%;bottom:16px;z-index:160;
+  width:min(92vw,420px);background:#fff;border-radius:16px;
+  box-shadow:0 14px 44px rgba(0,0,0,.32);padding:1rem 1.1rem 1.1rem;
+  transform:translateX(-50%) translateY(140%);transition:transform .3s var(--ease)}
+.preview-card.show{transform:translateX(-50%) translateY(0)}
+.pc-close{position:absolute;top:6px;right:10px;font-size:1.5rem;line-height:1;
+  color:var(--grey-4);background:none;border:none;cursor:pointer}
+.pc-name{font-size:1.3rem;color:var(--blue);margin-right:1.6rem;line-height:1.15}
+.pc-lines{display:flex;flex-wrap:wrap;gap:4px;margin:.55em 0}
+.pc-zone{color:var(--grey-4);font-size:.9rem;margin-bottom:.9rem}
+.pc-ride{width:100%;justify-content:center}
 
 /* SVG map elements */
 .line-casing{fill:none;stroke:#ffffff;stroke-width:5.6;stroke-linecap:round;stroke-linejoin:round;opacity:.95;transition:opacity .3s}
@@ -523,6 +540,9 @@ a{color:var(--blue)}
 .stepfree .badge{width:22px;height:22px;border-radius:50%;background:var(--district);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:.8rem}
 .stepfree.no .badge{background:var(--grey-3)}
 .detail-nav{display:flex;gap:.7rem;flex-wrap:wrap;margin-top:1.8rem}
+/* staggered reveal of detail blocks when a station opens */
+.reveal{animation:revealUp .5s var(--ease) both;animation-delay:var(--d,0ms)}
+@keyframes revealUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
 
 /* ---- Audio / mute toggle (global) ----------------------------------- */
 #mute{
@@ -557,6 +577,16 @@ a{color:var(--blue)}
 
   <!-- ===== Language toggle ===== -->
   <button id="lang" aria-label="切換為中文" title="中 / EN">中</button>
+
+  <!-- ===== Touch station preview ===== -->
+  <div id="previewBackdrop" class="preview-backdrop"></div>
+  <div id="previewCard" class="preview-card" role="dialog" aria-label="Station preview">
+    <button class="pc-close" id="pcClose" aria-label="Close">×</button>
+    <div class="pc-name" id="pcName"></div>
+    <div class="pc-lines" id="pcLines"></div>
+    <div class="pc-zone" id="pcZone"></div>
+    <button class="tfl-sign pc-ride" id="pcRide">Ride →</button>
+  </div>
 
   <!-- ================= A) HOME ================= -->
   <section id="home" class="screen active" aria-label="Home">
@@ -890,6 +920,7 @@ const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
 const NS = "http://www.w3.org/2000/svg";
 const el = (tag,attrs={})=>{const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);return e;};
 const reduceMotion = window.matchMedia("(prefers-reduced-motion:reduce)").matches;
+const isTouch = window.matchMedia("(hover: none), (pointer: coarse)").matches;
 /* tiny deterministic PRNG so the decorative street grid is stable across loads */
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
 
@@ -939,6 +970,7 @@ const I18N={
     openMaps:"Open in Google Maps ↗",
     inService:"In service",
     yearsUnit:"yrs",
+    ride:"Ride →",
   },
   zh:{
     title:"倫敦地鐵",
@@ -977,6 +1009,7 @@ const I18N={
     openMaps:"在 Google 地圖開啟 ↗",
     inService:"營運年數",
     yearsUnit:"年",
+    ride:"搭乘 →",
   },
 };
 const LINE_ZH={
@@ -1001,7 +1034,7 @@ function setLang(lang){
   document.documentElement.lang = lang==="zh"?"zh-Hant":"en";
   applyStaticLang();
   const filter=state.activeLineFilter;
-  buildChips(); setLineFilter(filter);           // rebuild chips, keep filter
+  buildChips(); setLineFilter(filter,false);      // rebuild chips, keep filter (no re-frame)
   const langBtn=$("#lang");
   langBtn.textContent = lang==="zh"?"EN":"中";
   langBtn.setAttribute("aria-label", lang==="zh"?"Switch to English":"切換為中文");
@@ -1300,7 +1333,7 @@ function buildMap(){
     gSt.appendChild(g);
 
     // events
-    g.addEventListener("click",()=>startJourney(id));
+    g.addEventListener("click",()=>{ if(isTouch) showPreview(id); else startJourney(id); });
     g.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();startJourney(id);}});
     g.addEventListener("mouseenter",e=>showTooltip(id,e));
     g.addEventListener("mousemove",moveTooltip);
@@ -1353,6 +1386,30 @@ function placeTooltip(x,y){
 function hideTooltip(){tooltip.classList.remove("show");}
 
 /* =========================================================================
+   TOUCH STATION PREVIEW  (tap once to inspect, then Ride)
+   ========================================================================= */
+function showPreview(id){
+  const s=S[id];
+  $("#pcName").textContent=s.name;
+  $("#pcLines").innerHTML=linesOf(id).map(l=>{
+    const L=LINES[l];
+    return `<span class="line-badge ${L.light?"light":""}" style="background:${L.colour}">${lineName(l)}</span>`;
+  }).join("");
+  $("#pcZone").textContent=zoneText(s.zone)+(s.interchange?" · "+T("interchangeWord"):"");
+  const ride=$("#pcRide");
+  ride.textContent=T("ride");
+  ride.onclick=()=>{hidePreview();startJourney(id);};
+  $("#previewBackdrop").classList.add("show");
+  $("#previewCard").classList.add("show");
+}
+function hidePreview(){
+  $("#previewBackdrop").classList.remove("show");
+  $("#previewCard").classList.remove("show");
+}
+$("#pcClose").onclick=hidePreview;
+$("#previewBackdrop").onclick=hidePreview;
+
+/* =========================================================================
    LINE FILTER CHIPS
    ========================================================================= */
 function buildChips(){
@@ -1376,7 +1433,7 @@ function buildChips(){
     wrap.appendChild(c);
   }
 }
-function setLineFilter(key){
+function setLineFilter(key,fit=true){
   state.activeLineFilter=key;
   $$("#chips .chip").forEach(c=>{
     const on = (key===null && c.classList.contains("reset")) || c.dataset.line===key;
@@ -1397,6 +1454,10 @@ function setLineFilter(key){
     const on = key===null || S[id].lines.includes(key);
     g.classList.toggle("dim-station", !on);
   });
+  // frame the chosen line (only when the map is actually on screen)
+  if(fit && $("#map-screen").classList.contains("active")){
+    if(key!==null) fitLine(key); else fitMap();
+  }
 }
 
 /* =========================================================================
@@ -1452,6 +1513,38 @@ function fitMap(){
   state.view.x=(sw-MAP_W*scale)/2;
   state.view.y=(sh-MAP_H*scale)/2;
   applyView();
+}
+/* Smoothly tween the map transform to a target view. */
+function animateViewTo(tx,ty,tscale,dur=560){
+  if(reduceMotion){state.view.x=tx;state.view.y=ty;state.view.scale=tscale;applyView();return;}
+  const sv={x:state.view.x,y:state.view.y,scale:state.view.scale};let t0=null;
+  const ease=t=>1-Math.pow(1-t,3);  // easeOutCubic
+  function frame(ts){
+    if(t0===null)t0=ts;
+    const p=Math.min(1,(ts-t0)/dur),e=ease(p);
+    state.view.x=sv.x+(tx-sv.x)*e;
+    state.view.y=sv.y+(ty-sv.y)*e;
+    state.view.scale=sv.scale+(tscale-sv.scale)*e;
+    applyView();
+    if(p<1)requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+/* Frame the map on all stations of a given line. */
+function fitLine(key){
+  const vp=$("#mapViewport");const vw=vp.clientWidth, vh=vp.clientHeight;
+  if(!vw||!vh)return;
+  const ids=Object.keys(S).filter(id=>S[id].lines.includes(key));
+  if(!ids.length)return;
+  let minX=1e9,minY=1e9,maxX=-1e9,maxY=-1e9;
+  ids.forEach(id=>{const s=S[id];
+    if(s.x<minX)minX=s.x; if(s.x>maxX)maxX=s.x;
+    if(s.y<minY)minY=s.y; if(s.y>maxY)maxY=s.y;});
+  const pad=72, bw=Math.max(maxX-minX,1), bh=Math.max(maxY-minY,1);
+  let scale=Math.min((vw-2*pad)/bw,(vh-2*pad)/bh);
+  scale=Math.min(4,Math.max(0.5,scale));
+  const cx=(minX+maxX)/2, cy=(minY+maxY)/2;
+  animateViewTo(vw/2-cx*scale, vh/2-cy*scale, scale);
 }
 function initMapInteraction(){
   const stage=$("#mapViewport");
@@ -1827,6 +1920,18 @@ function roundelSVG(colourStroke="#DC241F"){
     <rect x="28" y="66" width="144" height="28" fill="#0019A8"/></svg>`;
 }
 
+/* Replay a staggered fade/slide-in across the detail blocks. */
+function revealDetail(){
+  const targets=[$(".nameboard"), $("#stationDesc"), ...$$(".detail-body > *")];
+  targets.forEach((elm,i)=>{
+    if(!elm)return;
+    elm.classList.remove("reveal");
+    void elm.offsetWidth;                       // restart the animation
+    elm.style.setProperty("--d",(i*55)+"ms");
+    elm.classList.add("reveal");
+  });
+}
+
 async function openDetail(id){
   const s=S[id];
   show("detail");
@@ -1853,6 +1958,8 @@ async function openDetail(id){
   $("#stepfreeWrap").innerHTML = s.stepFree
     ? `<span class="stepfree"><span class="badge">♿</span> ${T("stepFreeYes")}</span>`
     : `<span class="stepfree no"><span class="badge">✕</span> ${T("stepFreeNo")}</span>`;
+
+  revealDetail();   // staggered entrance for the blocks above
 
   // hero + extract
   const hero=$("#hero");
@@ -1990,6 +2097,7 @@ $("#lang").onclick=()=>setLang(state.lang==="en"?"zh":"en");
 /* Global keyboard: Escape returns to map from journey/detail */
 document.addEventListener("keydown",e=>{
   if(e.key==="Escape"){
+    hidePreview();
     const active=$(".screen.active");
     if(active&&(active.id==="journey"||active.id==="detail"))show("map-screen");
   }
