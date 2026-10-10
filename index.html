@@ -152,6 +152,10 @@ a{color:var(--blue)}
 }
 .map-topbar .row1{display:flex;align-items:center;gap:.85rem}
 .mini-roundel{width:38px;height:38px;flex:none;filter:drop-shadow(0 2px 4px rgba(0,0,0,.35))}
+.home-link{display:flex;align-items:center;padding:0;border:none;background:none;cursor:pointer;flex:none}
+.home-link .mini-roundel{transition:transform .15s var(--ease)}
+.home-link:hover .mini-roundel{transform:scale(1.08)}
+.home-link:focus-visible{outline:3px solid var(--victoria);outline-offset:2px;border-radius:6px}
 .map-title{font-size:1.15rem;letter-spacing:.04em;white-space:nowrap;
   text-shadow:0 1px 2px rgba(0,0,0,.25)}
 .search-wrap{position:relative;flex:1;max-width:360px;margin-left:auto}
@@ -291,12 +295,13 @@ a{color:var(--blue)}
    ========================================================================= */
 #journey{
   --jline:#9aa0a6;
-  display:flex;align-items:center;justify-content:center;
+  display:flex;flex-direction:column;align-items:center;
   background:radial-gradient(130% 90% at 50% -10%, #17203a 0%, #0b0f1a 60%, #070a12 100%);
-  color:#fff;padding:1.4rem;overflow:hidden;
+  color:#fff;padding:1.4rem;overflow-y:auto;
 }
 /* tunnel speed lines rushing past, for a sense of motion */
-.speed-lines{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden;opacity:.6}
+.speed-lines{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden;opacity:.6;
+  box-shadow:inset 0 0 180px 50px rgba(0,0,0,.6)}
 .speed-lines::before,.speed-lines::after{
   content:"";position:absolute;top:0;bottom:0;left:0;width:200%;will-change:transform;
 }
@@ -310,7 +315,21 @@ a{color:var(--blue)}
 }
 @keyframes rush{from{transform:translate3d(0,0,0)}to{transform:translate3d(-50%,0,0)}}
 
-.journey-inner{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:1.15rem;width:100%}
+/* margin:auto 0 centres vertically when there's room, yet collapses so the
+   content stays fully scrollable (top reachable) on short screens */
+.journey-inner{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;
+  gap:1.15rem;width:100%;margin:auto 0}
+
+/* compact the ride on short viewports so nothing gets clipped */
+@media (max-height:640px){
+  .journey-inner{gap:.75rem}
+  .line-view svg{height:88px}
+  .carriage{padding:8px}
+  .journey-head{padding:.6rem .9rem}
+}
+@media (max-height:520px){
+  .line-view{display:none}        /* drop the mini line map when very tight */
+}
 
 /* destination head board */
 .journey-head{
@@ -411,6 +430,20 @@ a{color:var(--blue)}
   border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:12px 14px}
 .line-view svg{width:100%;height:120px;display:block}
 .train-dot{filter:drop-shadow(0 0 7px rgba(255,255,255,.6))}
+/* flowing light pulses running along the line while riding */
+.jflow{opacity:0;stroke-dasharray:2 15;transition:opacity .3s}
+#lineViewSvg.riding .jflow{opacity:.85;animation:jflow .55s linear infinite}
+@keyframes jflow{to{stroke-dashoffset:-17}}
+/* destination marker: pulses while approaching, flashes on arrival */
+.jtarget-ring{opacity:0;transform-box:fill-box;transform-origin:center}
+#lineViewSvg.riding .jtarget-ring{animation:tpulse 1.2s ease-out infinite}
+@keyframes tpulse{0%{opacity:.75;transform:scale(1)}100%{opacity:0;transform:scale(2.6)}}
+#lineViewSvg.arrived .jtarget-ring{animation:tflash .55s ease-out}
+@keyframes tflash{0%{opacity:.95;transform:scale(1)}100%{opacity:0;transform:scale(3.2)}}
+/* the train bobs gently as it glides */
+.train-body{transform-box:fill-box;transform-origin:center}
+#lineViewSvg.riding .train-body{animation:trainbob .5s ease-in-out infinite}
+@keyframes trainbob{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.6px)}}
 
 .journey-status{font-size:1.1rem;color:#e7eaef;letter-spacing:.03em;min-height:1.5em;text-align:center}
 .journey-status.arriving{color:#fff}
@@ -425,6 +458,7 @@ a{color:var(--blue)}
   .carriage.riding .carriage-windows span::after{animation:none}
   .carriage-doorway .door{transition:none}
   .journey-progress-fill::before{animation:none}
+  #lineViewSvg .jflow,#lineViewSvg .jtarget-ring,#lineViewSvg .train-body{animation:none}
   .speed-lines::before,.speed-lines::after{animation:none}
 }
 
@@ -562,10 +596,12 @@ a{color:var(--blue)}
   <section id="map-screen" class="screen" aria-label="Tube map and station selection">
     <div class="map-topbar">
       <div class="row1">
-        <svg class="mini-roundel" viewBox="0 0 200 160" aria-hidden="true">
-          <circle cx="100" cy="80" r="58" fill="none" stroke="#DC241F" stroke-width="20"/>
-          <rect x="20" y="66" width="160" height="28" fill="#0019A8"/>
-        </svg>
+        <button class="home-link" id="homeBtn" aria-label="Home" title="Home">
+          <svg class="mini-roundel" viewBox="0 0 200 160" aria-hidden="true">
+            <circle cx="100" cy="80" r="58" fill="none" stroke="#DC241F" stroke-width="20"/>
+            <rect x="20" y="66" width="160" height="28" fill="#0019A8"/>
+          </svg>
+        </button>
         <span class="map-title" data-i18n="chooseStation">Choose your station</span>
         <div class="search-wrap">
           <input id="search" type="text" placeholder="Search stations…" data-i18n-ph="searchPlaceholder" autocomplete="off"
@@ -1603,6 +1639,7 @@ function setupJourneyView(id,line){
   // ----- mini line view with gliding train -----
   const lv=$("#lineViewSvg");
   lv.innerHTML="";
+  lv.classList.remove("arrived","riding");
   const seq=LINE_SEQ[line];
   const idx=seq.indexOf(id);
   // show a window of up to 5 stations ending at target
@@ -1613,9 +1650,12 @@ function setupJourneyView(id,line){
   const padX=40, w=600, y=70;
   const nStops=Math.max(windowIds.length,2);
   const step=(w-padX*2)/(nStops-1);
-  // line
-  lv.appendChild(el("path",{d:`M ${padX} ${y} L ${w-padX} ${y}`,stroke:L.colour,
-    "stroke-width":8,"stroke-linecap":"round",fill:"none"}));
+  const fromX=padX, toX=padX+step*(windowIds.length-1);
+  const lineD=`M ${padX} ${y} L ${w-padX} ${y}`;
+  // base line + flowing motion pulses on top
+  lv.appendChild(el("path",{d:lineD,stroke:L.colour,"stroke-width":8,"stroke-linecap":"round",fill:"none"}));
+  lv.appendChild(el("path",{class:"jflow",d:lineD,stroke:"rgba(255,255,255,.6)",
+    "stroke-width":3,"stroke-linecap":"round",fill:"none"}));
   // station dots + labels
   windowIds.forEach((sid,i)=>{
     const cx=padX+step*i;
@@ -1627,17 +1667,24 @@ function setupJourneyView(id,line){
     t.textContent=S[sid].name.length>16?S[sid].name.slice(0,15)+"…":S[sid].name;
     lv.appendChild(t);
   });
-  // train (a little roundel-ish dot)
+  // pulsing ring around the destination
+  lv.appendChild(el("circle",{class:"jtarget-ring",cx:toX,cy:y,r:9,fill:"none",
+    stroke:L.colour,"stroke-width":3}));
+  // train (a little roundel-ish dot that bobs as it glides)
   const train=el("g",{class:"train-dot",id:"trainDot"});
-  train.appendChild(el("circle",{cx:0,cy:0,r:11,fill:"#fff"}));
-  train.appendChild(el("circle",{cx:0,cy:0,r:11,fill:"none",stroke:L.colour,"stroke-width":4}));
-  train.appendChild(el("rect",{x:-7,y:-3,width:14,height:6,fill:L.colour}));
+  const body=el("g",{class:"train-body"});
+  body.appendChild(el("circle",{cx:0,cy:0,r:11,fill:"#fff"}));
+  body.appendChild(el("circle",{cx:0,cy:0,r:11,fill:"none",stroke:L.colour,"stroke-width":4}));
+  body.appendChild(el("rect",{x:-7,y:-3,width:14,height:6,fill:L.colour}));
+  train.appendChild(body);
   lv.appendChild(train);
 
-  const fromX=padX, toX=padX+step*(windowIds.length-1);
+  lv.classList.add("riding");
   animateTrain(train,fromX,toX,y,()=>{
     status.textContent=T("arriving").replace("{name}",s.name);
     status.classList.add("arriving");
+    lv.classList.remove("riding");
+    lv.classList.add("arrived");
     // stop the rocking and slide the doors open at the platform
     car.classList.remove("riding");
     car.classList.add("arrived");
@@ -1917,6 +1964,10 @@ $("#startBtn").onclick=()=>{ensureAudio();enterMap();
 $("#arriveBtn").onclick=()=>openDetail(state.currentStation);
 $("#backBtn").onclick=()=>{enterMap();};
 $("#backToMap").onclick=()=>{enterMap();};
+$("#homeBtn").onclick=()=>{
+  if("speechSynthesis" in window)speechSynthesis.cancel();
+  show("home");
+};
 
 /* Mute toggle */
 const muteBtn=$("#mute");
