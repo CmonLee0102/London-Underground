@@ -114,8 +114,7 @@ a{color:var(--blue)}
 /* keep foreground content above the backdrop */
 #home>*:not(.home-bg){position:relative;z-index:1}
 .home-roundel{width:min(42vw,220px);height:auto;filter:drop-shadow(0 6px 18px rgba(0,25,168,.18))}
-#home h1{font-size:clamp(2.2rem,7vw,4rem);color:var(--blue);line-height:1.05;letter-spacing:.01em;
-  text-shadow:0 2px 12px rgba(0,25,168,.14)}
+#home h1{font-size:clamp(2.2rem,7vw,4rem);color:var(--blue);line-height:1.05;letter-spacing:.01em}
 #home .subtitle{font-size:clamp(1rem,3vw,1.3rem);color:var(--grey-4);max-width:34ch}
 #home .start-row{margin-top:.8rem}
 
@@ -313,12 +312,11 @@ a{color:var(--blue)}
 #journey{
   --jline:#9aa0a6;
   display:flex;flex-direction:column;align-items:center;
-  background:radial-gradient(130% 90% at 50% -10%, #17203a 0%, #0b0f1a 60%, #070a12 100%);
-  color:#fff;padding:1.4rem;overflow-y:auto;
+  background:linear-gradient(180deg,#eef4fa 0%,#dde7f1 55%,#cfdae7 100%);
+  color:#17202c;padding:1.4rem;overflow-y:auto;
 }
 /* tunnel speed lines rushing past, for a sense of motion */
-.speed-lines{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden;opacity:.6;
-  box-shadow:inset 0 0 180px 50px rgba(0,0,0,.6)}
+.speed-lines{display:none}  /* tunnel streaks not used on the light platform scene */
 .speed-lines::before,.speed-lines::after{
   content:"";position:absolute;top:0;bottom:0;left:0;width:200%;will-change:transform;
 }
@@ -341,7 +339,7 @@ a{color:var(--blue)}
 @media (max-height:640px){
   .journey-inner{gap:.75rem}
   .line-view svg{height:88px}
-  .carriage{padding:8px}
+  .train-scene{height:92px}
   .journey-head{padding:.6rem .9rem}
 }
 @media (max-height:520px){
@@ -351,62 +349,60 @@ a{color:var(--blue)}
 /* destination head board */
 .journey-head{
   display:flex;align-items:center;gap:1rem;width:min(92vw,640px);
-  background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.09);
+  background:#fff;border:1px solid #d7dde4;
   border-radius:16px;padding:.8rem 1.1rem;
-  box-shadow:0 10px 30px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.06);
+  box-shadow:0 8px 22px rgba(20,40,80,.12);
 }
 .jline-badge{background:var(--jline);color:#fff;font-size:.92rem;letter-spacing:.02em;
   padding:.35em 1em;border-radius:999px;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.35)}
 .jline-badge.on-light{color:#141414}
 .jhead-text{display:flex;flex-direction:column;line-height:1.12;min-width:0}
-.jhead-label{font-size:.68rem;letter-spacing:.22em;text-transform:uppercase;color:var(--grey-3)}
+.jhead-label{font-size:.68rem;letter-spacing:.22em;text-transform:uppercase;color:var(--grey-4)}
 .jhead-name{font-size:clamp(1.25rem,5vw,1.95rem);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
-/* train carriage */
-.carriage{
-  position:relative;width:min(92vw,640px);padding:10px;overflow:hidden;border-radius:22px;
-  background:linear-gradient(180deg,#2a3346 0%,#1b2330 70%);
-  border:1px solid rgba(255,255,255,.09);
-  box-shadow:0 26px 60px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.1);
-}
-.carriage-roof{height:12px;margin:-10px -10px 10px;border-radius:22px 22px 0 0;
-  background:linear-gradient(180deg,#3c4556,#273041)}
-/* gentle rocking while the train is in motion */
-.carriage.riding{animation:sway 1.9s ease-in-out infinite}
-@keyframes sway{
-  0%,100%{transform:translateY(0) rotate(0)}
-  25%{transform:translateY(-1.5px) rotate(-.22deg)}
-  75%{transform:translateY(1.5px) rotate(.22deg)}
-}
-.carriage-windows{display:flex;gap:10px;margin-top:10px}
-.carriage-windows span{position:relative;flex:1;height:24px;border-radius:7px;overflow:hidden;
-  background:linear-gradient(180deg,rgba(150,200,255,.12),rgba(150,200,255,.03));
-  border:1px solid rgba(255,255,255,.07);box-shadow:inset 0 0 10px rgba(130,180,255,.08)}
-/* tunnel lights streaking past the windows while riding */
-.carriage-windows span::after{content:"";position:absolute;top:0;bottom:0;left:-45%;width:45%;
-  background:linear-gradient(90deg,transparent,rgba(180,215,255,.4),transparent)}
-.carriage.riding .carriage-windows span::after{animation:winlight 1.3s linear infinite}
-.carriage.riding .carriage-windows span:nth-child(2)::after{animation-delay:.18s}
-.carriage.riding .carriage-windows span:nth-child(3)::after{animation-delay:.36s}
-@keyframes winlight{to{left:120%}}
-/* sliding doors that open on arrival, revealing the platform strip */
-.carriage-doorway{position:relative;height:30px;margin-top:10px;border-radius:7px;overflow:hidden;
-  background:#10151e;border:1px solid rgba(255,255,255,.07)}
-.carriage-doorway .platform{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-  font-size:.62rem;letter-spacing:.34em;color:#ffb000;text-shadow:0 0 6px rgba(255,176,0,.6);opacity:.9}
-.carriage-doorway .door{position:absolute;top:0;bottom:0;width:50%;
-  background:linear-gradient(180deg,#3c4556,#222a38);transition:transform .9s var(--ease)}
-.carriage-doorway .door-l{left:0;border-right:1px solid rgba(0,0,0,.5);box-shadow:2px 0 6px rgba(0,0,0,.4)}
-.carriage-doorway .door-r{right:0;border-left:1px solid rgba(0,0,0,.5);box-shadow:-2px 0 6px rgba(0,0,0,.4)}
-.carriage.arrived .door-l{transform:translateX(-100%)}
-.carriage.arrived .door-r{transform:translateX(100%)}
+/* passing train — a row of flat Tube carriages sliding across the platform.
+   Grey roof · white body · line-colour waistband · red doors · blue skirt. */
+.train-scene{position:relative;width:100%;overflow:hidden;height:112px;margin:.1rem 0;
+  -webkit-mask:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent);
+          mask:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent)}
+.train-track{display:flex;align-items:flex-end;height:100%;padding-top:14px;will-change:transform,filter}
+/* arrival roundel + station name — sits right of the big name, slides in from the left */
+.platform-sign{position:relative;margin-left:auto;flex:none;pointer-events:none;
+  display:flex;align-items:center;justify-content:center;
+  transform:translateX(-30px);opacity:0;
+  transition:transform .7s var(--ease),opacity .5s}
+.platform-sign.show{transform:translateX(0);opacity:1}
+.platform-sign .ps-ring{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:40px;height:40px;border-radius:50%;box-sizing:border-box;border:7px solid var(--red)}
+.platform-sign .ps-bar{position:relative;background:var(--blue);color:#fff;white-space:nowrap;
+  padding:.22em .75em;border-radius:3px;font-size:.9rem}
+.pcar{position:relative;flex:none;width:170px;height:90px;margin-right:12px;border-radius:9px;
+  background:#f3f4f6;border:1px solid #c7ccd2;box-shadow:0 8px 16px rgba(20,40,80,.2);overflow:hidden}
+.pcar::before{content:"";position:absolute;top:0;left:0;right:0;height:12px;background:#b7bcc2}       /* roof */
+.pcar::after{content:"";position:absolute;bottom:0;left:0;right:0;height:10px;background:var(--blue)} /* skirt */
+.pcar-stripe{position:absolute;top:12px;left:0;right:0;height:5px;background:var(--jline)}            /* waistband */
+.pcar-windows{position:absolute;top:26px;left:10px;right:10px;height:30px;display:flex;gap:7px}
+.pcar-windows span{flex:1;background:#20252c;border-radius:3px}
+.pcar-doors{position:absolute;top:24px;left:50%;transform:translateX(-50%);
+  width:42px;height:50px;overflow:hidden;border-radius:3px;background:#0f141b}
+.pcar-door{position:absolute;top:0;bottom:0;width:50%;background:#DC241F;transition:transform .7s var(--ease)}
+.pcar-door.l{left:0;border-right:2px solid #9c1511}
+.pcar-door.r{right:0;border-left:2px solid #9c1511}
+.train-track.arrived .pcar-door.l{transform:translateX(-100%)}
+.train-track.arrived .pcar-door.r{transform:translateX(100%)}
+/* bogie wheels */
+.pcar-wheel{position:absolute;bottom:1px;width:12px;height:12px;border-radius:50%;
+  background:#1b1f26;border:2px solid #0c0f14;z-index:2}
+.pcar-wheel.w1{left:30px}
+.pcar-wheel.w2{right:30px}
+.dep-board{width:min(92vw,640px)}
 
 /* LED dot-matrix display */
 .led{
   --amber:#ffb000;
   position:relative;background:#050300;border-radius:10px;
   padding:16px 10px;overflow:hidden;border:2px solid #130e00;
-  box-shadow:inset 0 0 26px rgba(255,176,0,.14), 0 2px 10px rgba(0,0,0,.5);
+  box-shadow:0 2px 10px rgba(0,0,0,.5);
 }
 .led::after{ /* scanlines */
   content:"";position:absolute;inset:0;pointer-events:none;
@@ -419,7 +415,7 @@ a{color:var(--blue)}
   min-width:.72em;height:1.5em;line-height:1.5em;padding:0 .1em;text-align:center;
   font-size:clamp(1rem,4.2vw,1.7rem);letter-spacing:.02em;
   font-family:"Hammersmith One",monospace;
-  color:var(--amber);text-shadow:0 0 6px rgba(255,176,0,.75),0 0 12px rgba(255,140,0,.45);
+  color:var(--amber);
   background:linear-gradient(180deg,#241a00 0%,#241a00 49%,#140e00 51%,#0d0900 100%);
   border-radius:3px;
   box-shadow:inset 0 0 0 1px rgba(255,176,0,.08),0 1px 2px rgba(0,0,0,.6);
@@ -428,25 +424,13 @@ a{color:var(--blue)}
 .flap-cell.flip{animation:flapflip .14s ease}
 @keyframes flapflip{0%{transform:scaleY(1)}48%{transform:scaleY(.08)}52%{transform:scaleY(.08)}100%{transform:scaleY(1)}}
 
-/* journey progress bar */
-.journey-progress{position:relative;width:min(92vw,640px);height:9px;border-radius:999px;
-  background:rgba(255,255,255,.1);
-  box-shadow:inset 0 1px 2px rgba(0,0,0,.45), 0 0 0 1px rgba(255,255,255,.06)}
-.journey-progress-fill{position:relative;height:100%;width:0;border-radius:999px;overflow:hidden;
-  background:var(--jline);
-  background-image:linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,.38));
-  box-shadow:0 0 14px var(--jline), 0 0 5px var(--jline)}
-.journey-progress-fill::before{ /* flowing diagonal stripes */
-  content:"";position:absolute;inset:0;
-  background:repeating-linear-gradient(45deg,rgba(255,255,255,.22) 0 9px,transparent 9px 18px);
-  background-size:26px 100%;animation:barstripes .7s linear infinite}
-@keyframes barstripes{to{background-position:26px 0}}
 
 /* mini line view with moving train */
-.line-view{width:min(92vw,640px);background:rgba(255,255,255,.045);
-  border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:12px 14px}
+.line-view{width:min(92vw,640px);background:#1b2330;
+  border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:12px 14px;
+  box-shadow:inset 0 2px 8px rgba(0,0,0,.4)}
 .line-view svg{width:100%;height:120px;display:block}
-.train-dot{filter:drop-shadow(0 0 7px rgba(255,255,255,.6))}
+.train-dot{filter:drop-shadow(0 2px 3px rgba(0,0,0,.5))}
 /* flowing light pulses running along the line while riding */
 .jflow{opacity:0;stroke-dasharray:2 15;transition:opacity .3s}
 #lineViewSvg.riding .jflow{opacity:.85;animation:jflow .55s linear infinite}
@@ -457,13 +441,9 @@ a{color:var(--blue)}
 @keyframes tpulse{0%{opacity:.75;transform:scale(1)}100%{opacity:0;transform:scale(2.6)}}
 #lineViewSvg.arrived .jtarget-ring{animation:tflash .55s ease-out}
 @keyframes tflash{0%{opacity:.95;transform:scale(1)}100%{opacity:0;transform:scale(3.2)}}
-/* the train bobs gently as it glides */
-.train-body{transform-box:fill-box;transform-origin:center}
-#lineViewSvg.riding .train-body{animation:trainbob .5s ease-in-out infinite}
-@keyframes trainbob{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.6px)}}
 
-.journey-status{font-size:1.1rem;color:#e7eaef;letter-spacing:.03em;min-height:1.5em;text-align:center}
-.journey-status.arriving{color:#fff}
+.journey-status{font-size:1.1rem;color:#2b3542;letter-spacing:.03em;min-height:1.5em;text-align:center}
+.journey-status.arriving{color:#0d1420}
 .journey-status.arriving::before{content:"● ";color:var(--jline)}
 .journey-cta{display:flex;gap:.8rem;flex-wrap:wrap;justify-content:center;opacity:0;transform:translateY(6px);
   transition:opacity .5s,transform .5s}
@@ -471,18 +451,25 @@ a{color:var(--blue)}
 
 @media (prefers-reduced-motion:reduce){
   .flap-cell.flip{animation:none}
-  .carriage.riding{animation:none}
-  .carriage.riding .carriage-windows span::after{animation:none}
-  .carriage-doorway .door{transition:none}
-  .journey-progress-fill::before{animation:none}
-  #lineViewSvg .jflow,#lineViewSvg .jtarget-ring,#lineViewSvg .train-body{animation:none}
+  .train-track.riding{animation:none;filter:none}
+  .pcar-door{transition:none}
+  .platform-sign{transition:none}
+  #lineViewSvg .jflow,#lineViewSvg .jtarget-ring{animation:none}
   .speed-lines::before,.speed-lines::after{animation:none}
 }
 
 /* =========================================================================
    D) STATION DETAIL
    ========================================================================= */
-#detail{overflow-y:auto;background:var(--grey-1)}
+#detail{overflow-y:auto;
+  /* same notebook-paper look as the map stage, scrolling with the content */
+  background-color:#fbf7ec;
+  background-image:
+    repeating-linear-gradient(to bottom, rgba(70,130,200,.22) 0 1px, transparent 1px 28px),
+    linear-gradient(to right, transparent 0 53px, rgba(220,36,31,.40) 53px 54px,
+      transparent 54px 57px, rgba(220,36,31,.22) 57px 58px, transparent 58px);
+  background-attachment:local;
+}
 .detail-inner{max-width:860px;margin:0 auto;padding:0 0 4rem}
 .detail-hero{position:relative;width:100%;height:min(42vh,340px);background:var(--grey-2);overflow:hidden}
 .detail-hero img{width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .6s}
@@ -546,7 +533,7 @@ a{color:var(--blue)}
 
 /* ---- Audio / mute toggle (global) ----------------------------------- */
 #mute{
-  position:fixed;top:12px;right:12px;z-index:200;
+  position:fixed;bottom:12px;left:12px;z-index:200;
   width:44px;height:44px;border-radius:50%;background:#fff;
   box-shadow:var(--shadow);color:var(--blue);display:flex;align-items:center;justify-content:center;
 }
@@ -555,7 +542,7 @@ a{color:var(--blue)}
 
 /* ---- Language toggle (global) --------------------------------------- */
 #lang{
-  position:fixed;top:12px;right:64px;z-index:200;
+  position:fixed;bottom:12px;left:64px;z-index:200;
   height:44px;min-width:44px;padding:0 .75em;border-radius:22px;background:#fff;
   box-shadow:var(--shadow);color:var(--blue);
   display:flex;align-items:center;justify-content:center;
@@ -571,6 +558,13 @@ a{color:var(--blue)}
 </head>
 <body>
 <div id="app">
+
+  <!-- hidden SVG filter: horizontal motion blur for the speeding train -->
+  <svg width="0" height="0" aria-hidden="true" style="position:absolute">
+    <filter id="speedblur" x="-15%" y="-10%" width="130%" height="120%">
+      <feGaussianBlur stdDeviation="6 0"/>
+    </filter>
+  </svg>
 
   <!-- ===== Global mute toggle ===== -->
   <button id="mute" aria-label="Mute sound" aria-pressed="false" title="Mute / unmute"></button>
@@ -667,22 +661,19 @@ a{color:var(--blue)}
           <span class="jhead-label" data-i18n="nextStation">Next station</span>
           <span class="jhead-name" id="journeyStationName">—</span>
         </div>
-      </div>
-
-      <div class="carriage">
-        <div class="carriage-roof"></div>
-        <div class="led">
-          <div class="flap-board" id="flapBoard" aria-hidden="true"></div>
-        </div>
-        <div class="carriage-windows" aria-hidden="true"><span></span><span></span><span></span></div>
-        <div class="carriage-doorway" aria-hidden="true">
-          <div class="platform" data-i18n="mindGap">MIND THE GAP</div>
-          <div class="door door-l"></div>
-          <div class="door door-r"></div>
+        <div class="platform-sign" id="platformSign" aria-hidden="true">
+          <span class="ps-ring"></span>
+          <span class="ps-bar"></span>
         </div>
       </div>
 
-      <div class="journey-progress"><div class="journey-progress-fill" id="journeyProgressFill"></div></div>
+      <div class="train-scene" aria-hidden="true">
+        <div class="train-track" id="trainTrack"></div>
+      </div>
+
+      <div class="led dep-board">
+        <div class="flap-board" id="flapBoard" aria-hidden="true"></div>
+      </div>
 
       <div class="line-view">
         <svg id="lineViewSvg" viewBox="0 0 600 120" preserveAspectRatio="xMidYMid meet"></svg>
@@ -1052,6 +1043,7 @@ function setLang(lang){
    SCREEN MANAGEMENT
    ========================================================================= */
 function show(id){
+  if(id!=="journey") clearTrainAnim();   // stop the passing-train rAF/timers when leaving
   $$(".screen").forEach(s=>s.classList.remove("active"));
   const target=$("#"+id);
   target.classList.add("active");
@@ -1708,10 +1700,14 @@ function setupJourneyView(id,line){
   badge.classList.toggle("on-light", !!L.light);
   $("#journeyStationName").textContent=s.name;
 
-  // ----- carriage: start rocking, doors shut -----
-  const car=$(".carriage");
-  car.classList.remove("arrived");
-  car.classList.add("riding");
+  // ----- passing train: boarding at the platform, doors open -----
+  clearTrainAnim();
+  const myToken=++journeyToken;
+  const track=$("#trainTrack"), sign=$("#platformSign");
+  track.style.filter="none"; track.style.transform="translateX(0)";
+  track.classList.add("arrived");       // doors open while boarding
+  sign.classList.remove("show");        // arrival roundel hidden
+  const psBar=sign.querySelector(".ps-bar"); if(psBar)psBar.textContent=s.name;
 
   // ----- split-flap departure board flips to the station name -----
   flapBoardTo($("#flapBoard"), s.name);
@@ -1720,14 +1716,6 @@ function setupJourneyView(id,line){
   status.textContent=T("departing");
   status.classList.remove("arriving");
   $("#journeyCta").classList.remove("show");
-
-  // ----- progress bar fills over the ride -----
-  const RIDE=3.2;
-  const pf=$("#journeyProgressFill");
-  pf.style.transition="none"; pf.style.width="0%";
-  void pf.offsetWidth;
-  pf.style.transition=`width ${reduceMotion?0:RIDE}s cubic-bezier(.4,0,.2,1)`;
-  pf.style.width="100%";
 
   // ----- mini line view with gliding train -----
   const lv=$("#lineViewSvg");
@@ -1763,29 +1751,55 @@ function setupJourneyView(id,line){
   // pulsing ring around the destination
   lv.appendChild(el("circle",{class:"jtarget-ring",cx:toX,cy:y,r:9,fill:"none",
     stroke:L.colour,"stroke-width":3}));
-  // train (a little roundel-ish dot that bobs as it glides)
+  // train — a simple flat carriage in Tube livery that bobs as it glides
   const train=el("g",{class:"train-dot",id:"trainDot"});
   const body=el("g",{class:"train-body"});
-  body.appendChild(el("circle",{cx:0,cy:0,r:11,fill:"#fff"}));
-  body.appendChild(el("circle",{cx:0,cy:0,r:11,fill:"none",stroke:L.colour,"stroke-width":4}));
-  body.appendChild(el("rect",{x:-7,y:-3,width:14,height:6,fill:L.colour}));
+  body.appendChild(el("rect",{x:-16,y:-9,width:32,height:18,rx:4,fill:"#f3f4f6",stroke:"#20252c","stroke-width":1}));
+  body.appendChild(el("rect",{x:-16,y:-9,width:32,height:5,rx:2,fill:"#b7bcc2"}));     // grey roof
+  body.appendChild(el("rect",{x:-12,y:-2,width:17,height:6,rx:1,fill:"#20252c"}));     // window band
+  body.appendChild(el("rect",{x:-16,y:5,width:32,height:3,fill:L.colour}));            // line-colour stripe
+  body.appendChild(el("rect",{x:11,y:-9,width:5,height:18,rx:2,fill:"#ffd200"}));      // yellow cab front (right)
   train.appendChild(body);
   lv.appendChild(train);
+  train.setAttribute("transform",`translate(${fromX},${y})`);   // sit at the start
 
-  lv.classList.add("riding");
-  animateTrain(train,fromX,toX,y,()=>{
+  prefetchStation(s);   // warm the cache during the ride
+
+  // arrival: begin braking; doors open + sign slide in once fully stopped
+  const onArrive=()=>{
+    if(myToken!==journeyToken)return;
     status.textContent=T("arriving").replace("{name}",s.name);
     status.classList.add("arriving");
-    lv.classList.remove("riding");
+    lv.classList.remove("riding"); lv.classList.add("arrived");
+    $("#journeyCta").classList.add("show");
+    if(track._stop)track._stop();
+  };
+
+  if(reduceMotion){
+    // no motion: present the arrived state directly
+    train.setAttribute("transform",`translate(${toX},${y})`);
     lv.classList.add("arrived");
-    // stop the rocking and slide the doors open at the platform
-    car.classList.remove("riding");
-    car.classList.add("arrived");
+    track.classList.add("arrived"); sign.classList.add("show");
+    status.textContent=T("arriving").replace("{name}",s.name); status.classList.add("arriving");
     $("#journeyCta").classList.add("show");
     announce(s);
-  });
-  // kick off fetch early
-  prefetchStation(s);
+    return;
+  }
+
+  // realistic sequence: board (0.7s) → doors close → depart (accelerate)
+  jtimeout(()=>{ if(myToken!==journeyToken)return;
+    track.classList.remove("arrived");            // doors slide shut
+  }, 700);
+  jtimeout(()=>{ if(myToken!==journeyToken)return;
+    runPassingTrain(track, ()=>{                  // on full stop:
+      if(myToken!==journeyToken)return;
+      track.classList.add("arrived");             // doors open at the platform
+      sign.classList.add("show");                 // arrival roundel slides in
+      announce(s);                                 // chime + "this is X" once fully stopped
+    });
+    lv.classList.add("riding");
+    animateTrain(train,fromX,toX,y,onArrive);
+  }, 1400);
 }
 
 function animateTrain(node,x0,x1,y,done){
@@ -1800,6 +1814,42 @@ function animateTrain(node,x0,x1,y,done){
     if(p<1)requestAnimationFrame(frame);else done();
   }
   requestAnimationFrame(frame);
+}
+
+/* ---- Passing-train motion controller --------------------------------------
+   Drives the carriages with requestAnimationFrame so acceleration, cruising,
+   motion-blur and braking all feel physical. Position wraps by one carriage
+   period, so the stream is seamless yet can stop anywhere. */
+let journeyToken=0, trainRAF=null, trainTimers=[];
+const TRAIN_PERIOD=182;               // .pcar width (170) + gap (12)
+function clearTrainAnim(){
+  if(trainRAF){cancelAnimationFrame(trainRAF);trainRAF=null;}
+  trainTimers.forEach(clearTimeout); trainTimers=[];
+}
+function jtimeout(fn,ms){const id=setTimeout(fn,ms);trainTimers.push(id);return id;}
+function runPassingTrain(track,onStopped){
+  const VMAX=0.62, ACCEL=950, DECEL=1300;   // px/ms · accel ms · brake ms
+  const blur=document.querySelector("#speedblur feGaussianBlur");
+  let pos=0, vel=0, phase="accel", last=null, aT=0, dT=0, dV=0;
+  track.style.filter="url(#speedblur)";
+  track._stop=()=>{ if(phase!=="decel"){dV=vel;dT=0;phase="decel";} };
+  function frame(ts){
+    if(last===null)last=ts;
+    const dt=Math.min(50,ts-last); last=ts;
+    if(phase==="accel"){ aT+=dt; const p=Math.min(1,aT/ACCEL); vel=VMAX*p*p; if(p>=1)phase="cruise"; }
+    else if(phase==="cruise"){ vel=VMAX; }
+    else if(phase==="decel"){ dT+=dt; const p=Math.min(1,dT/DECEL); vel=dV*Math.pow(1-p,3); if(p>=1)vel=0; }
+    pos+=vel*dt;
+    track.style.transform=`translateX(${(-(pos%TRAIN_PERIOD)).toFixed(2)}px)`;
+    if(blur)blur.setAttribute("stdDeviation",(vel/VMAX*6).toFixed(2)+" 0");  // blur tracks speed
+    if(phase==="decel"&&vel<=0){
+      track.style.filter="none"; trainRAF=null;
+      onStopped&&onStopped();
+      return;
+    }
+    trainRAF=requestAnimationFrame(frame);
+  }
+  trainRAF=requestAnimationFrame(frame);
 }
 
 /* Split-flap departure board: each cell flaps up through the character set to
@@ -2129,11 +2179,27 @@ function buildPaperDecor(){
        <rect x="28" y="66" width="144" height="28" fill="#0019A8"/></svg>`).join("");
 }
 
+/* Build the row of carriages for the passing-train scene (once). */
+function buildPassingTrain(){
+  const track=$("#trainTrack"); if(!track) return;
+  track.innerHTML="";
+  for(let i=0;i<9;i++){
+    const car=document.createElement("div");
+    car.className="pcar";
+    car.innerHTML=`<div class="pcar-stripe"></div>
+      <div class="pcar-windows"><span></span><span></span><span></span><span></span></div>
+      <div class="pcar-doors"><i class="pcar-door l"></i><i class="pcar-door r"></i></div>
+      <i class="pcar-wheel w1"></i><i class="pcar-wheel w2"></i>`;
+    track.appendChild(car);
+  }
+}
+
 function init(){
   applyStaticLang();
   buildMap();
   buildChips();
   buildPaperDecor();
+  buildPassingTrain();
   initMapInteraction();
   renderMute();
 }
